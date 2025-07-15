@@ -5,6 +5,7 @@ requires-python = ">= 3.13"
 dependencies = [
   "FindSystemFontsFilename",
   "ffmpeg-normalize",
+  "fonttools",
   "nicegui",
   "pydantic",
   "pywebview",
