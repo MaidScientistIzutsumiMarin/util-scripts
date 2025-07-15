@@ -1,0 +1,12 @@
+[project]
+name = "util-scripts"
+readme = "README.md"
+requires-python = ">= 3.13"
+dependencies = [
+  "FindSystemFontsFilename",
+  "ffmpeg-normalize",
+  "nicegui",
+  "pydantic",
+  "pywebview",
+  "typed-ffmpeg",
+]
