@@ -1,12 +1,11 @@
 from collections.abc import Generator
+from functools import partial
 from pathlib import Path
 from typing import ClassVar, TypeVar, override
 
 import ffmpeg
 from fontra import all_fonts, get_font, get_font_styles, has_font_style, init_fontdb
 from nicegui import ui
-from nicegui.elements.mixins.text_element import TextElement
-from nicegui.events import UiEventArguments
 from pydantic import PositiveFloat, PositiveInt
 
 from common import Common, get_duration, get_stream_info
@@ -19,33 +18,34 @@ class MemeTextCreator(Common):
 
     text: str = ""
     font_family: str = "Impact"
-    font_size: PositiveFloat = 10
+    font_size: PositiveFloat = 100
     box_height: PositiveInt = 100
-    output_suffix: str = ".webp"
 
     @override
     def model_post_init(self, *args: object) -> None:
         init_fontdb()
 
-        self._text_area = ui.textarea("Overlay Text").classes("w-full").props("clearable").bind_value(self, "text")
         with ui.row(align_items="center"):
-            self.set_font_style(None)
-            ui.input("Output Suffix").bind_value(self, "output_suffix")
+            self.set_font_family("")
+            ui.splitter()
+            ui.number("Font Size", min=1).bind_value(self, "font_size")
+            ui.number("Box Height", min=1).bind_value(self, "box_height")
+
+        self._text_area = ui.textarea("Overlay Text").classes("w-full").props("clearable").bind_value(self, "text")
 
         return super().model_post_init(*args)
 
     @ui.refreshable_method
-    def set_font_style(self, arguments: UiEventArguments | None) -> None:
-        if arguments is not None and isinstance(arguments.sender, TextElement):
-            self.font_family = arguments.sender.text
+    def set_font_family(self, font_family: str) -> None:
+        if font_family:
+            self.font_family = font_family
 
         with ui.dropdown_button(self.font_family, auto_close=True).style(f"font-family: {self.font_family}"), ui.column(align_items="stretch").classes("gap-0"):
             for family in sorted(all_fonts()):
-                is_selected = self.font_family == family
-                ui.button(
+                ui.item(
                     family,
-                    on_click=lambda argument: self.set_font_style.refresh(argument),
-                ).props("outline" if is_selected else "flat").style(f"font-family: {family}").set_enabled(not is_selected)
+                    on_click=partial(self.set_font_family.refresh, family),
+                ).style(f"font-family: {family}").set_enabled(self.font_family != family)
 
     @override
     def main(self) -> Generator[Path]:
@@ -58,9 +58,9 @@ class MemeTextCreator(Common):
                 msg = f"The value of 'width' or 'height' is None: {stream_info}"
                 raise ValueError(msg)
 
-            output_path = Path(self.output_folder, self._text_area.value).with_suffix(self.output_suffix)
+            output_path = Path(self.output_folder, self._text_area.value).with_suffix(".webp")
             stream = (
-                ffmpeg.input(input_file)
+                ffmpeg.input(input_file, hwaccel=self.hwaccel)
                 .drawtext(
                     fontfile=font_file,
                     text=self._text_area.value.replace("\n", "\r"),
@@ -79,5 +79,4 @@ class MemeTextCreator(Common):
             )
 
             self.encode_with_progress(stream, get_duration(input_file))
-
             yield output_path

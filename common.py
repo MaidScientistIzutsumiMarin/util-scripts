@@ -5,10 +5,11 @@ from collections.abc import Generator
 from datetime import timedelta
 from logging import getLogger
 from math import inf
+from mimetypes import guess_file_type, guess_type
 from pathlib import Path
 from subprocess import Popen
 from time import perf_counter
-from typing import Literal, Self, cast, override
+from typing import ClassVar, Literal, Self, cast, override
 
 from ffmpeg import probe_obj
 from ffmpeg.dag.global_runnable.global_args import GlobalArgs
@@ -31,6 +32,8 @@ class Common(BaseModel):
         validate_by_name=True,
         ignored_types=(ui.refreshable_method,),
     )
+
+    hwaccel: ClassVar = "d3d12va"
 
     last_folders: defaultdict[int, str] = defaultdict(str)
     input_files: tuple[str, ...] = ()
@@ -66,16 +69,19 @@ class Common(BaseModel):
             self._input_files_label = ui.label().classes("text-caption text-center text-grey")
             ui.label().classes("text-caption text-center text-grey").bind_text(self, "output_folder")
 
-            with ui.expansion("Input"):
+            with ui.expansion("Input"), ui.grid(columns=2):
                 run(self.select_input_files())
 
-            self._results = ui.expansion("Output")
+            with ui.expansion("Output"):
+                self._results = ui.grid(columns=2)
+
             run(self.select_output_directory())
 
         ui.separator()
 
         with ui.expansion("Encoding", value=True).classes("w-full"):
             self._code_block = ui.code().classes("w-full")
+            self._code_block.markdown.style("scrollbar-color: gray black")
             with ui.row(wrap=False, align_items="center").classes("w-full"):
                 ui.image("妖夢ちゃんに誕生日お祝いしてもらいました.webp").props("width=5%")
                 self._progress = ui.linear_progress()
@@ -93,10 +99,9 @@ class Common(BaseModel):
 
     def wrap_main(self) -> None:
         self._results.clear()
-
         for path in self.main():
             with self._results:
-                render_video(path)
+                media_element(path)
 
     @abstractmethod
     def main(self) -> Generator[Path]: ...
@@ -106,7 +111,7 @@ class Common(BaseModel):
         self.input_files = await self.select_files(self.input_files, allow_multiple=True)
         self._input_files_label.text = ", ".join(self.input_files)
         for input_file in self.input_files:
-            render_video(input_file)
+            media_element(input_file)
         self.set_start_enabled()
 
     async def select_output_directory(self) -> None:
@@ -194,8 +199,18 @@ class Common(BaseModel):
                     pass
 
 
-def render_video(file: StrOrPath) -> None:
-    ui.video(file).props(f"title={str(file).replace('\\', '/')}")
+def media_element(file: StrOrPath) -> None:
+    if file_type := guess_file_type(file)[0]:
+        match file_type.split("/"):
+            case "audio", _:
+                element = ui.audio(file)
+            case "image", _:
+                element = ui.image(file)
+                element.force_reload()
+            case _:
+                element = ui.video(file)
+
+        element.props(f"title={file}")
 
 
 def get_duration(path: StrOrPath) -> float:

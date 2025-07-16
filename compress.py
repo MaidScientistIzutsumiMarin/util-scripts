@@ -4,26 +4,22 @@ from tempfile import TemporaryFile
 from typing import override
 
 import ffmpeg
+from ffmpeg.codecs.encoders import libx264
 from nicegui import ui
-from pydantic import ByteSize, PositiveFloat
+from pydantic import ByteSize
 
 from common import Common, get_duration
 
 
 class VideoCompressor(Common):
     max_size: ByteSize = "500MiB"  # pyright: ignore[reportAssignmentType]
-    bitrate_percent: PositiveFloat = 95
     output_suffix: str = ".mp4"
-    video_codec: str = "hevc_amf"
 
     @override
     def model_post_init(self, *args: object) -> None:
-        with ui.grid(columns=2):
+        with ui.row():
             ui.number("Max Video Size", suffix="bytes").bind_value(self, "max_size")
-            ui.number("Target Bitrate Ratio", suffix="%").bind_value(self, "bitrate_percent")
-
             ui.input("Output Suffix").bind_value(self, "output_suffix")
-            ui.input("Video Codec").bind_value(self, "video_codec")
 
         return super().model_post_init(*args)
 
@@ -36,7 +32,7 @@ class VideoCompressor(Common):
             for input_file in self.input_files:
                 duration = get_duration(input_file)
 
-                input_stream = ffmpeg.input(input_file)
+                input_stream = ffmpeg.input(input_file, hwaccel=self.hwaccel)
                 stream = input_stream.audio.output(filename=audio_path)
                 self.encode_with_progress(stream, duration)
 
@@ -45,15 +41,15 @@ class VideoCompressor(Common):
                 stream = input_stream.video_stream(0).output(
                     audio_input,
                     filename=output_path,
-                    vcodec=self.video_codec,
                     acodec="copy",
+                    encoder_options=libx264(
+                        preset="ultrafast",
+                    ),
                     extra_options={
                         "bufsize": 2 * video_max_rate,
                         "maxrate": video_max_rate,
-                        "vb": self.bitrate_percent * video_max_rate / 100,
                     },
                 )
 
                 self.encode_with_progress(stream, duration)
-
                 yield output_path
