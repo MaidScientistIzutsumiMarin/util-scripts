@@ -5,7 +5,7 @@ from collections.abc import Generator
 from datetime import timedelta
 from logging import getLogger
 from math import inf
-from mimetypes import guess_file_type, guess_type
+from mimetypes import guess_file_type
 from pathlib import Path
 from subprocess import Popen
 from time import perf_counter
