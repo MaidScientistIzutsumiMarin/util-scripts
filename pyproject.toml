@@ -3,9 +3,8 @@ name = "util-scripts"
 readme = "README.md"
 requires-python = ">= 3.13"
 dependencies = [
-  "FindSystemFontsFilename",
   "ffmpeg-normalize",
-  "fonttools",
+  "fontra",
   "nicegui",
   "pydantic",
   "pywebview",

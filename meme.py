@@ -1,62 +1,56 @@
+from collections.abc import Generator
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar, cast, override
+from typing import ClassVar, TypeVar, override
 
 import ffmpeg
-from find_system_fonts_filename import get_system_fonts_filename
-from fontTools.ttLib import TTFont
+from fontra import all_fonts, get_font, get_font_styles, has_font_style, init_fontdb
 from nicegui import ui
 from nicegui.elements.mixins.text_element import TextElement
-from nicegui.events import ClickEventArguments
+from nicegui.events import UiEventArguments
 from pydantic import PositiveFloat, PositiveInt
 
-from common import Common, get_duration, get_stream_info, render_video
-
-if TYPE_CHECKING:
-    from fontTools.ttLib.tables._n_a_m_e import table__n_a_m_e
-
+from common import Common, get_duration, get_stream_info
 
 AnyElement = TypeVar("AnyElement", bound=ui.element)
 
 
 class MemeTextCreator(Common):
+    default_font_style: ClassVar = "Regular"
+
     text: str = ""
     font_family: str = "Impact"
     font_size: PositiveFloat = 10
     box_height: PositiveInt = 100
     output_suffix: str = ".webp"
 
-    @staticmethod
-    def style_font(element: AnyElement, family: str = font_family) -> AnyElement:
-        return element.style(f"font-family: {family};")
-
     @override
     def model_post_init(self, *args: object) -> None:
-        self._fonts: dict[str, str] = {}
+        init_fontdb()
 
         self._text_area = ui.textarea("Overlay Text").classes("w-full").props("clearable").bind_value(self, "text")
-
         with ui.row(align_items="center"):
-            with ui.dropdown_button("Font"), ui.column(align_items="stretch").classes("gap-0"):
-                for file in get_system_fonts_filename():
-                    if family := cast("str | None", cast("table__n_a_m_e", TTFont(file, fontNumber=0)["name"]).getDebugName(1)):
-                        self.style_font(ui.button(family, on_click=self.set_font_family).props("flat"), family).set_enabled(file != self.font_family)
-                        self._fonts[family] = file
-
-            self._font_label = ui.label().bind_text(self, "font_family")
+            self.set_font_style(None)
             ui.input("Output Suffix").bind_value(self, "output_suffix")
-
-        self.style_font(self._font_label)
 
         return super().model_post_init(*args)
 
-    def set_font_family(self, arguments: ClickEventArguments) -> None:
-        if isinstance(arguments.sender, TextElement):
+    @ui.refreshable_method
+    def set_font_style(self, arguments: UiEventArguments | None) -> None:
+        if arguments is not None and isinstance(arguments.sender, TextElement):
             self.font_family = arguments.sender.text
-            self.style_font(self._font_label)
+
+        with ui.dropdown_button(self.font_family, auto_close=True).style(f"font-family: {self.font_family}"), ui.column(align_items="stretch").classes("gap-0"):
+            for family in sorted(all_fonts()):
+                is_selected = self.font_family == family
+                ui.button(
+                    family,
+                    on_click=lambda argument: self.set_font_style.refresh(argument),
+                ).props("outline" if is_selected else "flat").style(f"font-family: {family}").set_enabled(not is_selected)
 
     @override
-    def main(self) -> None:
-        self._results.clear()
+    def main(self) -> Generator[Path]:
+        font_style = get_font_styles(self.font_family)[0] if not has_font_style(self.font_family, self.default_font_style) else self.default_font_style
+        font_file = str(get_font(self.font_family, font_style).path)
 
         for input_file in self.input_files:
             stream_info = get_stream_info(input_file, "width", "height", stream="v")
@@ -68,7 +62,7 @@ class MemeTextCreator(Common):
             stream = (
                 ffmpeg.input(input_file)
                 .drawtext(
-                    fontfile=self._fonts[self.font_family],
+                    fontfile=font_file,
                     text=self._text_area.value.replace("\n", "\r"),
                     box=True,
                     fontsize=self.font_size,
@@ -85,4 +79,5 @@ class MemeTextCreator(Common):
             )
 
             self.encode_with_progress(stream, get_duration(input_file))
-            render_video(output_path)
+
+            yield output_path

@@ -2,6 +2,7 @@
 .nicegui
 config
 data
+output
 start.lnk
 
 # Byte-compiled / optimized / DLL files

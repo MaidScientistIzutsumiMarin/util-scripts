@@ -59,8 +59,7 @@ def main() -> None:
     ui.timer(0, lambda: app.native.main_window is not None and app.native.main_window.maximize(), once=True)
     ui.run(
         dark=None,
-        # show=False,
-        native=True,
+        show=False,
         reload=False,
     )
 

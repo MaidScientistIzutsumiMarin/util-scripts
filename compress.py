@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from pathlib import Path
 from tempfile import TemporaryFile
 from typing import override
@@ -6,7 +7,7 @@ import ffmpeg
 from nicegui import ui
 from pydantic import ByteSize, PositiveFloat
 
-from common import Common, get_duration, render_video
+from common import Common, get_duration
 
 
 class VideoCompressor(Common):
@@ -27,9 +28,7 @@ class VideoCompressor(Common):
         return super().model_post_init(*args)
 
     @override
-    def main(self) -> None:
-        self._results.clear()
-
+    def main(self) -> Generator[Path]:
         with TemporaryFile(suffix=self.output_suffix, delete_on_close=False) as audio_fp:
             audio_path = Path(audio_fp.name)
             audio_input = ffmpeg.input(audio_path)
@@ -56,4 +55,5 @@ class VideoCompressor(Common):
                 )
 
                 self.encode_with_progress(stream, duration)
-                render_video(output_path)
+
+                yield output_path

@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from asyncio import CancelledError, run
 from collections import defaultdict
+from collections.abc import Generator
 from datetime import timedelta
 from logging import getLogger
 from math import inf
@@ -65,24 +66,23 @@ class Common(BaseModel):
             self._input_files_label = ui.label().classes("text-caption text-center text-grey")
             ui.label().classes("text-caption text-center text-grey").bind_text(self, "output_folder")
 
-            with ui.expansion("Input"), ui.grid(columns=2):
+            with ui.expansion("Input"):
                 run(self.select_input_files())
 
-            with ui.expansion("Output"), ui.grid(columns=2) as self._results:
-                run(self.select_output_directory())
+            self._results = ui.expansion("Output")
+            run(self.select_output_directory())
 
         ui.separator()
 
-        self._command_block = ui.code().classes("w-full")
-        with ui.row(wrap=False, align_items="center").classes("w-full"):
-            self._progress = ui.linear_progress()
-
-            self._out_time_label = ui.label()
-            self._time_elapsed_label = ui.label()
-            self._total_size_label = ui.label()
-            self._speed_label = ui.label()
-
-            ui.image("妖夢ちゃんに誕生日お祝いしてもらいました.webp").props("width=5%")
+        with ui.expansion("Encoding", value=True).classes("w-full"):
+            self._code_block = ui.code().classes("w-full")
+            with ui.row(wrap=False, align_items="center").classes("w-full"):
+                ui.image("妖夢ちゃんに誕生日お祝いしてもらいました.webp").props("width=5%")
+                self._progress = ui.linear_progress()
+                self._out_time_label = ui.label()
+                self._time_elapsed_label = ui.label()
+                self._total_size_label = ui.label()
+                self._speed_label = ui.label()
 
     async def run(self) -> None:
         if self._run_switch.value:
@@ -92,11 +92,14 @@ class Common(BaseModel):
                 self._run_switch.value = False
 
     def wrap_main(self) -> None:
-        with self._results:
-            return self.main()
+        self._results.clear()
+
+        for path in self.main():
+            with self._results:
+                render_video(path)
 
     @abstractmethod
-    def main(self) -> None: ...
+    def main(self) -> Generator[Path]: ...
 
     @ui.refreshable_method
     async def select_input_files(self) -> None:
@@ -136,13 +139,13 @@ class Common(BaseModel):
         )
 
         duration_delta = timedelta(seconds=duration)
-        out_time_format = "{} / {}"
+        ratio_format = "{} / {}"
 
-        self._command_block.content = stream.compile_line()
+        self._code_block.content = stream.compile_line()
         self._progress.props(remove="color")
 
-        with stream.run_async(quiet=True, overwrite_output=True) as process:
-            self.handle_std(process, duration_delta, out_time_format)
+        with stream.run_async(quiet=True) as process:
+            self.handle_std(process, duration_delta, ratio_format)
             errors = "" if process.stderr is None else process.stderr.read().decode()
 
         if process.poll():
@@ -151,11 +154,10 @@ class Common(BaseModel):
 
         self._progress.props("color=positive")
         self._progress.value = 1
-        self._out_time_label.text = out_time_format.format(duration_delta, duration_delta)
 
         getLogger().warning(errors)
 
-    def handle_std(self, process: Popen[bytes], duration_delta: timedelta, out_time_format: str) -> None:
+    def handle_std(self, process: Popen[bytes], duration_delta: timedelta, ratio_format: str) -> None:
         if process.stdout is None:
             return
 
@@ -169,14 +171,23 @@ class Common(BaseModel):
 
             match line.split(b"="):
                 case [b"total_size", total_size]:
-                    self._total_size_label.text = f"{ByteSize(total_size).human_readable()} / {ByteSize(int(total_size) / (self._progress.value or inf)).human_readable()}"
+                    self._total_size_label.text = ratio_format.format(
+                        ByteSize(total_size).human_readable(),
+                        ByteSize(int(total_size) / (self._progress.value or inf)).human_readable(),
+                    )
                 case [b"out_time_us", out_time_us] if out_time_us != b"N/A\n":
                     out_time_delta = timedelta(microseconds=int(out_time_us))
                     time_elapsed_delta = timedelta(seconds=perf_counter() - start_time)
 
                     self._progress.value = out_time_delta / duration_delta
-                    self._out_time_label.text = out_time_format.format(out_time_delta, duration_delta)
-                    self._time_elapsed_label.text = f"{time_elapsed_delta} / {time_elapsed_delta / self._progress.value}"
+                    self._out_time_label.text = ratio_format.format(
+                        out_time_delta,
+                        duration_delta,
+                    )
+                    self._time_elapsed_label.text = ratio_format.format(
+                        time_elapsed_delta,
+                        time_elapsed_delta / self._progress.value,
+                    )
                 case [b"speed", speed]:
                     self._speed_label.text = speed.decode()
                 case _:
