@@ -44,9 +44,11 @@ class Common(BaseModel):
         return Path("config", f"{cls.__name__}.json")
 
     @classmethod
-    def load(cls) -> Self:
+    def load(cls, tab: ui.tab) -> Self:
         path = cls.toml_path()
-        return cls.model_validate_json(path.read_bytes()) if path.exists() else cls()
+
+        with ui.tab_panel(tab):
+            return cls.model_validate_json(path.read_bytes()) if path.exists() else cls()
 
     @model_validator(mode="after")
     def write(self) -> Self:
@@ -69,17 +71,17 @@ class Common(BaseModel):
             self._input_files_label = ui.label().classes("text-caption text-center text-grey")
             ui.label().classes("text-caption text-center text-grey").bind_text(self, "output_folder")
 
-            with ui.expansion("Input"), ui.grid(columns=2):
+            with ui.expansion("Input"), ui.grid(columns=2).classes("w-full"):
                 run(self.select_input_files())
 
             with ui.expansion("Output"):
-                self._results = ui.grid(columns=2)
+                self._results = ui.grid(columns=2).classes("w-full")
 
             run(self.select_output_directory())
 
         ui.separator()
 
-        with ui.expansion("Encoding", value=True).classes("w-full"):
+        with ui.expansion("Encoding").classes("w-full"):
             self._code_block = ui.code().classes("w-full")
             self._code_block.markdown.style("scrollbar-color: gray black")
             with ui.row(wrap=False, align_items="center").classes("w-full"):
@@ -111,7 +113,7 @@ class Common(BaseModel):
         self.input_files = await self.select_files(self.input_files, allow_multiple=True)
         self._input_files_label.text = ", ".join(self.input_files)
         for input_file in self.input_files:
-            media_element(input_file)
+            media_element(Path(input_file))
         self.set_start_enabled()
 
     async def select_output_directory(self) -> None:
@@ -199,7 +201,7 @@ class Common(BaseModel):
                     pass
 
 
-def media_element(file: StrOrPath) -> None:
+def media_element(file: Path) -> None:
     if file_type := guess_file_type(file)[0]:
         match file_type.split("/"):
             case "audio", _:
@@ -210,7 +212,7 @@ def media_element(file: StrOrPath) -> None:
             case _:
                 element = ui.video(file)
 
-        element.props(f"title={file}")
+        element.props(f"title='{file.as_posix()}'")
 
 
 def get_duration(path: StrOrPath) -> float:

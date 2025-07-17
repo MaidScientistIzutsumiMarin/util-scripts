@@ -43,12 +43,9 @@ def main() -> None:
         value=app.storage.general.get(tab_key, one),
         on_change=lambda handler: app.storage.general.update({tab_key: handler.value}),
     ).classes("w-full"):
-        with ui.tab_panel(one):
-            VideoCompressor.load()
-        with ui.tab_panel(two):
-            DiscordExpressionCreator.load()
-        with ui.tab_panel(three):
-            MemeTextCreator.load()
+        VideoCompressor.load(one)
+        DiscordExpressionCreator.load(two)
+        MemeTextCreator.load(three)
 
     with ui.row().classes("w-full"):
         ui.space()
@@ -59,7 +56,7 @@ def main() -> None:
     ui.timer(0, lambda: app.native.main_window is not None and app.native.main_window.maximize(), once=True)
     ui.run(
         dark=None,
-        show=False,
+        native=True,
         reload=False,
     )
 
