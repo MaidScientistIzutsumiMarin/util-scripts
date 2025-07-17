@@ -3,7 +3,7 @@
 config
 data
 output
-start.lnk
+*.lnk
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
