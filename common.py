@@ -19,6 +19,8 @@ from nicegui.server import Server
 from pydantic import BaseModel, ByteSize, ConfigDict, model_validator
 from webview import FOLDER_DIALOG, OPEN_DIALOG
 
+type StrPath = str | Path
+
 
 class Common(BaseModel):
     model_config = ConfigDict(
@@ -31,6 +33,7 @@ class Common(BaseModel):
     )
 
     hwaccel: ClassVar = "d3d12va"
+    _input_button_enabled = True
 
     last_paths: dict[int, Path] = {}
     input_paths: list[Path] = []
@@ -62,7 +65,7 @@ class Common(BaseModel):
             self._run_switch = ui.switch("Run", on_change=self.run)
 
         with ui.grid(columns=2).classes("w-full"):
-            ui.button("Select Input Paths", on_click=self.select_input_paths.refresh)
+            ui.button("Select Input Paths", on_click=self.select_input_paths.refresh).set_enabled(self._input_button_enabled)
             ui.button("Select Output Directory", on_click=self.select_output_directory)
 
             self._input_paths_label = ui.label().classes("text-caption text-center text-grey")
@@ -115,7 +118,7 @@ class Common(BaseModel):
 
     async def select_output_directory(self) -> None:
         (self.output_directory,) = await self.select_paths([self.output_directory], FOLDER_DIALOG)
-        self._output_directory_label.text = str(self.output_directory)
+        self._output_directory_label.text = str(self.output_directory.resolve())
         self.output_directory.mkdir(parents=True, exist_ok=True)
         self.set_start_enabled()
 
@@ -135,7 +138,7 @@ class Common(BaseModel):
         return default
 
     def set_start_enabled(self) -> None:
-        return self._run_switch.set_enabled(bool(self.input_paths and self.output_directory))
+        return self._run_switch.set_enabled(not self._input_button_enabled or bool(self.input_paths))
 
     def encode_with_progress(self, stream: GlobalArgs, duration: float) -> None:
         stream = stream.global_args(
@@ -214,7 +217,7 @@ def media_element(path: Path) -> None:
         element.props(f"title='{path.as_posix()}'")
 
 
-def get_duration(path: Path) -> float:
+def get_duration(path: StrPath) -> float:
     format_info = get_format_info(path, "duration")
     if format_info.duration is None:
         msg = f"The value of 'duration' is None: {format_info}"
@@ -222,7 +225,7 @@ def get_duration(path: Path) -> float:
     return format_info.duration
 
 
-def get_stream_info(path: Path, *entries: str, stream: str) -> streamType:
+def get_stream_info(path: StrPath, *entries: str, stream: str) -> streamType:
     info = get_ffprobe_info(path, "stream", *entries, stream=stream)
     if info.streams is None or info.streams.stream is None:
         msg = f"The value of 'stream' is None: {info}"
@@ -230,7 +233,7 @@ def get_stream_info(path: Path, *entries: str, stream: str) -> streamType:
     return info.streams.stream[0]
 
 
-def get_format_info(path: Path, *entries: str) -> formatType:
+def get_format_info(path: StrPath, *entries: str) -> formatType:
     info = get_ffprobe_info(path, "format", *entries, stream="")
     if info.format is None:
         msg = f"The value of 'format' is None: {info}"
@@ -238,7 +241,7 @@ def get_format_info(path: Path, *entries: str) -> formatType:
     return info.format
 
 
-def get_ffprobe_info(path: Path, entries_type: Literal["stream", "format"], *entries: str, stream: str) -> ffprobeType:
+def get_ffprobe_info(path: StrPath, entries_type: Literal["stream", "format"], *entries: str, stream: str) -> ffprobeType:
     if info := probe_obj(
         path,
         show_streams=False,
