@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from datetime import timedelta
 from functools import partial
 from pathlib import Path
 from typing import ClassVar, TypeVar, override
@@ -24,8 +23,6 @@ class MemeTextCreator(Common):
     box_height: PositiveInt = 100
     font_color: Color = Color("#000000")
     box_color: Color = Color("#ffffff")
-    start: timedelta = timedelta.min
-    stop: timedelta = timedelta.max
     output_suffix: str = ".webp"
     loop: bool = True
 
@@ -81,15 +78,15 @@ class MemeTextCreator(Common):
         font_style = get_font_styles(self.font_family)[0] if not has_font_style(self.font_family, self.default_font_style) else self.default_font_style
         font_file = str(get_font(self.font_family, font_style).path)
 
-        for input_file in self.input_files:
-            stream_info = get_stream_info(input_file, "width", "height", stream="v")
+        for input_path in self.input_paths:
+            stream_info = get_stream_info(input_path, "width", "height", stream="v")
             if stream_info.width is None or stream_info.height is None:
                 msg = f"The value of 'width' or 'height' is None: {stream_info}"
                 raise ValueError(msg)
 
-            output_path = Path(self.output_folder, self._text_area.value).with_suffix(self.output_suffix)
+            output_path = self.output_directory / input_path.with_suffix(self.output_suffix)
             stream = (
-                ffmpeg.input(input_file, hwaccel=self.hwaccel)
+                ffmpeg.input(input_path, hwaccel=self.hwaccel)
                 .drawtext(
                     fontfile=font_file,
                     text=self._text_area.value.replace("\n", "\r"),
@@ -109,5 +106,5 @@ class MemeTextCreator(Common):
                 )
             )
 
-            self.encode_with_progress(stream, get_duration(input_file))
+            self.encode_with_progress(stream, get_duration(input_path))
             yield output_path

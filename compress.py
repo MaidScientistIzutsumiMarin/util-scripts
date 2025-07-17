@@ -29,14 +29,14 @@ class VideoCompressor(Common):
             audio_path = Path(audio_fp.name)
             audio_input = ffmpeg.input(audio_path)
 
-            for input_file in self.input_files:
-                duration = get_duration(input_file)
+            for input_path in self.input_paths:
+                duration = get_duration(input_path)
 
-                input_stream = ffmpeg.input(input_file, hwaccel=self.hwaccel)
+                input_stream = ffmpeg.input(input_path, hwaccel=self.hwaccel)
                 stream = input_stream.audio.output(filename=audio_path)
                 self.encode_with_progress(stream, duration)
 
-                output_path = Path(self.output_folder) / Path(input_file).with_suffix(self.output_suffix).name
+                output_path = self.output_directory / input_path.with_suffix(self.output_suffix).name
                 video_max_rate = 8 * (self.max_size - audio_path.stat().st_size) / duration
                 stream = input_stream.video_stream(0).output(
                     audio_input,

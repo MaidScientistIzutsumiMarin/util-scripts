@@ -1,6 +1,5 @@
 from abc import abstractmethod
 from asyncio import CancelledError, run
-from collections import defaultdict
 from collections.abc import Generator
 from datetime import timedelta
 from logging import getLogger
@@ -20,8 +19,6 @@ from nicegui.server import Server
 from pydantic import BaseModel, ByteSize, ConfigDict, model_validator
 from webview import FOLDER_DIALOG, OPEN_DIALOG
 
-type StrOrPath = str | Path
-
 
 class Common(BaseModel):
     model_config = ConfigDict(
@@ -35,9 +32,9 @@ class Common(BaseModel):
 
     hwaccel: ClassVar = "d3d12va"
 
-    last_folders: defaultdict[int, str] = defaultdict(str)
-    input_files: tuple[str, ...] = ()
-    output_folder: str = ""
+    last_paths: dict[int, Path] = {}
+    input_paths: list[Path] = []
+    output_directory: Path = Path()
 
     @classmethod
     def toml_path(cls) -> Path:
@@ -65,14 +62,14 @@ class Common(BaseModel):
             self._run_switch = ui.switch("Run", on_change=self.run)
 
         with ui.grid(columns=2).classes("w-full"):
-            ui.button("Select Input Files", on_click=self.select_input_files.refresh)
-            ui.button("Select Output Folder", on_click=self.select_output_directory)
+            ui.button("Select Input Paths", on_click=self.select_input_paths.refresh)
+            ui.button("Select Output Directory", on_click=self.select_output_directory)
 
-            self._input_files_label = ui.label().classes("text-caption text-center text-grey")
-            ui.label().classes("text-caption text-center text-grey").bind_text(self, "output_folder")
+            self._input_paths_label = ui.label().classes("text-caption text-center text-grey")
+            self._output_directory_label = ui.label().classes("text-caption text-center text-grey")
 
             with ui.expansion("Input"), ui.grid(columns=2).classes("w-full"):
-                run(self.select_input_files())
+                run(self.select_input_paths())
 
             with ui.expansion("Output"):
                 self._results = ui.grid(columns=2).classes("w-full")
@@ -109,34 +106,36 @@ class Common(BaseModel):
     def main(self) -> Generator[Path]: ...
 
     @ui.refreshable_method
-    async def select_input_files(self) -> None:
-        self.input_files = await self.select_files(self.input_files, allow_multiple=True)
-        self._input_files_label.text = ", ".join(self.input_files)
-        for input_file in self.input_files:
-            media_element(Path(input_file))
+    async def select_input_paths(self) -> None:
+        self.input_paths = await self.select_paths(self.input_paths, allow_multiple=True)
+        self._input_paths_label.text = ", ".join(map(str, self.input_paths))
+        for input_path in self.input_paths:
+            media_element(input_path)
         self.set_start_enabled()
 
     async def select_output_directory(self) -> None:
-        (self.output_folder,) = await self.select_files([self.output_folder], FOLDER_DIALOG)
-        Path(self.output_folder).mkdir(parents=True, exist_ok=True)
+        (self.output_directory,) = await self.select_paths([self.output_directory], FOLDER_DIALOG)
+        self._output_directory_label.text = str(self.output_directory)
+        self.output_directory.mkdir(parents=True, exist_ok=True)
         self.set_start_enabled()
 
-    async def select_files[T](self, default: T, dialog_type: int = OPEN_DIALOG, *, allow_multiple: bool = False) -> T | tuple[str, ...]:
+    async def select_paths[T](self, default: T, dialog_type: int = OPEN_DIALOG, *, allow_multiple: bool = False) -> T | list[Path]:
         # app.native.main_window.create_file_dialog can also return None, so we are casting it for maximum type safety.
         if files := app.native.main_window and cast(
             "tuple[str, ...] | None",
             await app.native.main_window.create_file_dialog(
                 dialog_type,
-                self.last_folders[dialog_type],
+                str(self.last_paths.get(dialog_type, "")),
                 allow_multiple=allow_multiple,
             ),
         ):
-            self.last_folders[dialog_type] = files[0]
-            return files
+            paths = list(map(Path, files))
+            self.last_paths[dialog_type] = paths[0]
+            return paths
         return default
 
     def set_start_enabled(self) -> None:
-        return self._run_switch.set_enabled(bool(self.input_files and self.output_folder))
+        return self._run_switch.set_enabled(bool(self.input_paths and self.output_directory))
 
     def encode_with_progress(self, stream: GlobalArgs, duration: float) -> None:
         stream = stream.global_args(
@@ -201,21 +200,21 @@ class Common(BaseModel):
                     pass
 
 
-def media_element(file: Path) -> None:
-    if file_type := guess_file_type(file)[0]:
+def media_element(path: Path) -> None:
+    if file_type := guess_file_type(path)[0]:
         match file_type.split("/"):
             case "audio", _:
-                element = ui.audio(file)
+                element = ui.audio(path)
             case "image", _:
-                element = ui.image(file)
+                element = ui.image(path)
                 element.force_reload()
             case _:
-                element = ui.video(file)
+                element = ui.video(path)
 
-        element.props(f"title='{file.as_posix()}'")
+        element.props(f"title='{path.as_posix()}'")
 
 
-def get_duration(path: StrOrPath) -> float:
+def get_duration(path: Path) -> float:
     format_info = get_format_info(path, "duration")
     if format_info.duration is None:
         msg = f"The value of 'duration' is None: {format_info}"
@@ -223,7 +222,7 @@ def get_duration(path: StrOrPath) -> float:
     return format_info.duration
 
 
-def get_stream_info(path: StrOrPath, *entries: str, stream: str) -> streamType:
+def get_stream_info(path: Path, *entries: str, stream: str) -> streamType:
     info = get_ffprobe_info(path, "stream", *entries, stream=stream)
     if info.streams is None or info.streams.stream is None:
         msg = f"The value of 'stream' is None: {info}"
@@ -231,7 +230,7 @@ def get_stream_info(path: StrOrPath, *entries: str, stream: str) -> streamType:
     return info.streams.stream[0]
 
 
-def get_format_info(path: StrOrPath, *entries: str) -> formatType:
+def get_format_info(path: Path, *entries: str) -> formatType:
     info = get_ffprobe_info(path, "format", *entries, stream="")
     if info.format is None:
         msg = f"The value of 'format' is None: {info}"
@@ -239,7 +238,7 @@ def get_format_info(path: StrOrPath, *entries: str) -> formatType:
     return info.format
 
 
-def get_ffprobe_info(path: StrOrPath, entries_type: Literal["stream", "format"], *entries: str, stream: str) -> ffprobeType:
+def get_ffprobe_info(path: Path, entries_type: Literal["stream", "format"], *entries: str, stream: str) -> ffprobeType:
     if info := probe_obj(
         path,
         show_streams=False,
