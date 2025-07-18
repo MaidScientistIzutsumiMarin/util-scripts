@@ -8,6 +8,7 @@ dependencies = [
   "nicegui",
   "pydantic",
   "pydantic-extra-types",
+  "pytimeparse2",
   "pywebview",
   "typed-ffmpeg",
 ]
