@@ -23,8 +23,9 @@ class MemeTextCreator(Common):
     box_height: PositiveInt = 100
     font_color: Color = Color("#000000")
     box_color: Color = Color("#ffffff")
-    output_suffix: str = ".webp"
     loop: bool = True
+
+    output_suffix: str = ".webp"
 
     @override
     def model_post_init(self, *args: object) -> None:

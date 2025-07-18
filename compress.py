@@ -17,9 +17,7 @@ class VideoCompressor(Common):
 
     @override
     def model_post_init(self, *args: object) -> None:
-        with ui.row():
-            ui.number("Max Video Size", suffix="bytes").bind_value(self, "max_size")
-            ui.input("Output Suffix").bind_value(self, "output_suffix")
+        ui.number("Max Video Size", suffix="bytes").bind_value(self, "max_size")
 
         return super().model_post_init(*args)
 

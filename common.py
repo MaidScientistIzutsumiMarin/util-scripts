@@ -5,6 +5,7 @@ from datetime import timedelta
 from logging import getLogger
 from math import inf
 from mimetypes import guess_file_type
+from os import fspath
 from pathlib import Path
 from subprocess import Popen
 from time import perf_counter
@@ -22,7 +23,18 @@ from webview import FOLDER_DIALOG, OPEN_DIALOG
 type StrPath = str | Path
 
 
-class Common(BaseModel):
+class FullyValidatedModel(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+        validate_assignment=True,
+        validate_default=True,
+        validate_return=True,
+        validate_by_name=True,
+        ignored_types=(ui.refreshable_method,),
+    )
+
+
+class Common(FullyValidatedModel):
     model_config = ConfigDict(
         extra="ignore",
         validate_assignment=True,
@@ -33,11 +45,11 @@ class Common(BaseModel):
     )
 
     hwaccel: ClassVar = "d3d12va"
-    _input_button_enabled = True
 
     last_paths: dict[int, Path] = {}
     input_paths: list[Path] = []
     output_directory: Path = Path()
+    output_suffix: str = ""
 
     @classmethod
     def toml_path(cls) -> Path:
@@ -64,9 +76,12 @@ class Common(BaseModel):
         with ui.row():
             self._run_switch = ui.switch("Run", on_change=self.run)
 
-        with ui.grid(columns=2).classes("w-full"):
-            ui.button("Select Input Paths", on_click=self.select_input_paths.refresh).set_enabled(self._input_button_enabled)
-            ui.button("Select Output Directory", on_click=self.select_output_directory)
+        with ui.grid(columns=2).classes("w-full h-full"):
+            ui.button("Select Input Paths", on_click=self.select_input_paths.refresh)
+
+            with ui.row(wrap=False, align_items="stretch"):
+                ui.button("Select Output Directory", on_click=self.select_output_directory).classes("w-full")
+                ui.input("Output Extension").bind_value(self, "output_suffix")
 
             self._input_paths_label = ui.label().classes("text-caption text-center text-grey")
             self._output_directory_label = ui.label().classes("text-caption text-center text-grey")
@@ -111,14 +126,11 @@ class Common(BaseModel):
     @ui.refreshable_method
     async def select_input_paths(self) -> None:
         self.input_paths = await self.select_paths(self.input_paths, allow_multiple=True)
-        self._input_paths_label.text = ", ".join(map(str, self.input_paths))
-        for input_path in self.input_paths:
-            media_element(input_path)
-        self.set_start_enabled()
+        self.on_input_paths_change()
 
     async def select_output_directory(self) -> None:
         (self.output_directory,) = await self.select_paths([self.output_directory], FOLDER_DIALOG)
-        self._output_directory_label.text = str(self.output_directory.resolve())
+        self._output_directory_label.text = fspath(self.output_directory)
         self.output_directory.mkdir(parents=True, exist_ok=True)
         self.set_start_enabled()
 
@@ -128,7 +140,7 @@ class Common(BaseModel):
             "tuple[str, ...] | None",
             await app.native.main_window.create_file_dialog(
                 dialog_type,
-                str(self.last_paths.get(dialog_type, "")),
+                fspath(self.last_paths.get(dialog_type, "")),
                 allow_multiple=allow_multiple,
             ),
         ):
@@ -137,8 +149,14 @@ class Common(BaseModel):
             return paths
         return default
 
+    def on_input_paths_change(self) -> None:
+        self._input_paths_label.text = ", ".join(map(fspath, self.input_paths))
+        for input_path in self.input_paths:
+            media_element(input_path)
+        self.set_start_enabled()
+
     def set_start_enabled(self) -> None:
-        return self._run_switch.set_enabled(not self._input_button_enabled or bool(self.input_paths))
+        return self._run_switch.set_enabled(bool(self.input_paths))
 
     def encode_with_progress(self, stream: GlobalArgs, duration: float) -> None:
         stream = stream.global_args(
@@ -203,7 +221,7 @@ class Common(BaseModel):
                     pass
 
 
-def media_element(path: Path) -> None:
+def media_element(path: Path) -> ui.audio | ui.image | ui.video | None:
     if file_type := guess_file_type(path)[0]:
         match file_type.split("/"):
             case "audio", _:
@@ -215,6 +233,8 @@ def media_element(path: Path) -> None:
                 element = ui.video(path)
 
         element.props(f"title='{path.as_posix()}'")
+        return element
+    return None
 
 
 def get_duration(path: StrPath) -> float:

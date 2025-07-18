@@ -7,7 +7,7 @@ from os import name
 from nicegui import app, ui
 
 from compress import VideoCompressor
-from discord import DiscordExpressionCreator
+from discord import SoundReactionsCreator
 from meme import MemeTextCreator
 
 
@@ -44,7 +44,7 @@ def main() -> None:
         on_change=lambda handler: app.storage.general.update({tab_key: handler.value}),
     ).classes("w-full"):
         VideoCompressor.load(one)
-        DiscordExpressionCreator.load(two)
+        SoundReactionsCreator.load(two)
         MemeTextCreator.load(three)
 
     with ui.row().classes("w-full"):
