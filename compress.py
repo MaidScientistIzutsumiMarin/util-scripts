@@ -4,7 +4,6 @@ from tempfile import TemporaryFile
 from typing import override
 
 import ffmpeg
-from ffmpeg.codecs.encoders import libx264
 from nicegui import ui
 from pydantic import ByteSize
 
@@ -40,9 +39,6 @@ class VideoCompressor(Common):
                     audio_input,
                     filename=output_path,
                     acodec="copy",
-                    encoder_options=libx264(
-                        preset="ultrafast",
-                    ),
                     extra_options={
                         "bufsize": 2 * video_max_rate,
                         "maxrate": video_max_rate,
