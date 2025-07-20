@@ -49,7 +49,6 @@ class Common(FullyValidatedModel):
     last_paths: dict[int, Path] = {}
     input_paths: list[Path] = []
     output_directory: Path = Path()
-    output_suffix: str = ""
 
     @classmethod
     def toml_path(cls) -> Path:
@@ -66,7 +65,7 @@ class Common(FullyValidatedModel):
     def write(self) -> Self:
         path = self.toml_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.model_dump_json(), encoding="utf_8")
+        path.write_text(self.model_dump_json(indent=4), encoding="utf_8")
         return self
 
     @override
@@ -223,15 +222,11 @@ class Common(FullyValidatedModel):
 
 def media_element(path: Path) -> ui.audio | ui.image | ui.video | None:
     if file_type := guess_file_type(path)[0]:
-        match file_type.split("/"):
-            case "audio", _:
-                element = ui.audio(path)
-            case "image", _:
-                element = ui.image(path)
-                element.force_reload()
-            case _:
-                element = ui.video(path)
-
+        if file_type.startswith("image"):
+            element = ui.image(path)
+            element.force_reload()
+        else:
+            element = ui.video(path)
         element.props(f"title='{path.as_posix()}'")
         return element
     return None
