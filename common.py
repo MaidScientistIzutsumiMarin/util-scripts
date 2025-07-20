@@ -151,7 +151,8 @@ class Common(FullyValidatedModel):
     def on_input_paths_change(self) -> None:
         self._input_paths_label.text = ", ".join(map(fspath, self.input_paths))
         for input_path in self.input_paths:
-            media_element(input_path)
+            if input_path.exists():
+                media_element(input_path)
         self.set_start_enabled()
 
     def set_start_enabled(self) -> None:
