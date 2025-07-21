@@ -6,9 +6,9 @@ from os import name
 
 from nicegui import app, ui
 
-from compress import VideoCompressor
-from discord import SoundReactionsCreator
-from meme import MemeTextCreator
+from compress import Compress
+from discord import Discord
+from meme import Meme
 
 
 class LogElementHandler(ui.log, Handler):
@@ -34,18 +34,18 @@ def main() -> None:
         set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 
     with ui.tabs().classes("w-full") as tabs:
-        one = ui.tab("Compress Videos")
-        two = ui.tab("Create Discord Expressions")
-        three = ui.tab("Create Meme Text")
+        one = ui.tab(Compress.__name__)
+        two = ui.tab(Discord.__name__)
+        three = ui.tab(Meme.__name__)
     ui.separator()
     with ui.tab_panels(
         tabs,
         value=app.storage.general.get(tab_key, one),
         on_change=lambda handler: app.storage.general.update({tab_key: handler.value}),
     ).classes("w-full"):
-        VideoCompressor.load(one)
-        SoundReactionsCreator.load(two)
-        MemeTextCreator.load(three)
+        Compress.load(one)
+        Discord.load(two)
+        Meme.load(three)
 
     with ui.row().classes("w-full"):
         ui.space()

@@ -14,7 +14,7 @@ from common import Common, get_duration, get_stream_info
 AnyElement = TypeVar("AnyElement", bound=ui.element)
 
 
-class MemeTextCreator(Common):
+class Meme(Common):
     default_font_style: ClassVar = "Regular"
 
     text: str = ""

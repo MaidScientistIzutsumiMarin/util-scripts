@@ -26,7 +26,7 @@ class Reaction(FullyValidatedModel):
         return self.input_path < other.input_path
 
 
-class SoundReactionsCreator(Common):
+class Discord(Common):
     reactions: dict[UUID, Reaction] = {}  # noqa: RUF012
     output_suffix: str = ".opus"
 

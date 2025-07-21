@@ -10,7 +10,7 @@ from pydantic import ByteSize
 from common import Common, get_duration
 
 
-class VideoCompressor(Common):
+class Compress(Common):
     max_size: ByteSize = "500MiB"  # pyright: ignore[reportAssignmentType]
     output_suffix: str = ".mp4"
 
