@@ -1,7 +1,8 @@
 from abc import abstractmethod
-from asyncio import CancelledError, run
+from asyncio import CancelledError
 from collections.abc import Generator
 from datetime import timedelta
+from functools import cache
 from logging import getLogger
 from math import inf
 from mimetypes import guess_file_type
@@ -25,7 +26,6 @@ type StrPath = str | Path
 
 class FullyValidatedModel(BaseModel):
     model_config = ConfigDict(
-        extra="ignore",
         validate_assignment=True,
         validate_default=True,
         validate_return=True,
@@ -35,15 +35,6 @@ class FullyValidatedModel(BaseModel):
 
 
 class Common(FullyValidatedModel):
-    model_config = ConfigDict(
-        extra="ignore",
-        validate_assignment=True,
-        validate_default=True,
-        validate_return=True,
-        validate_by_name=True,
-        ignored_types=(ui.refreshable_method,),
-    )
-
     hwaccel: ClassVar = "d3d12va"
 
     last_paths: dict[int, Path] = {}
@@ -51,21 +42,19 @@ class Common(FullyValidatedModel):
     output_directory: Path = Path()
 
     @classmethod
+    @cache
     def toml_path(cls) -> Path:
         return Path("config", f"{cls.__name__}.json")
 
     @classmethod
     def load(cls, tab: ui.tab) -> Self:
-        path = cls.toml_path()
-
         with ui.tab_panel(tab):
-            return cls.model_validate_json(path.read_bytes()) if path.exists() else cls()
+            return cls.model_validate_json(cls.toml_path().read_bytes()) if cls.toml_path().exists() else cls()
 
     @model_validator(mode="after")
     def write(self) -> Self:
-        path = self.toml_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.model_dump_json(indent=4), encoding="utf_8")
+        self.toml_path().parent.mkdir(parents=True, exist_ok=True)
+        self.toml_path().write_text(self.model_dump_json(indent=4), encoding="utf_8")
         return self
 
     @override
@@ -76,35 +65,24 @@ class Common(FullyValidatedModel):
             self._run_switch = ui.switch("Run", on_change=self.run)
 
         with ui.grid(columns=2).classes("w-full h-full"):
-            ui.button("Select Input Paths", on_click=self.select_input_paths.refresh)
-
+            ui.button("Select Input Paths", on_click=self.select_input)
             with ui.row(wrap=False, align_items="stretch"):
-                ui.button("Select Output Directory", on_click=self.select_output_directory).classes("w-full")
+                ui.button("Select Output Directory", on_click=self.select_output).classes("w-full")
                 ui.input("Output Extension").bind_value(self, "output_suffix")
 
-            self._input_paths_label = ui.label().classes("text-caption text-center text-grey")
-            self._output_directory_label = ui.label().classes("text-caption text-center text-grey")
+            self._input_label = ui.label().classes("text-caption text-center text-grey")
+            self._output_label = ui.label().classes("text-caption text-center text-grey")
 
-            with ui.expansion("Input"), ui.grid(columns=2).classes("w-full"):
-                run(self.select_input_paths())
-
+            with ui.expansion("Input"):
+                self._input_grid = ui.grid(columns=2).classes("w-full")
             with ui.expansion("Output"):
-                self._results = ui.grid(columns=2).classes("w-full")
-
-            run(self.select_output_directory())
+                self._results_grid = ui.grid(columns=2).classes("w-full")
 
         ui.separator()
 
-        with ui.expansion("Encoding").classes("w-full"):
-            self._code_block = ui.code().classes("w-full")
-            self._code_block.markdown.style("scrollbar-color: gray black")
-            with ui.row(wrap=False, align_items="center").classes("w-full"):
-                ui.image("妖夢ちゃんに誕生日お祝いしてもらいました.webp").props("width=5%")
-                self._progress = ui.linear_progress()
-                self._out_time_label = ui.label()
-                self._time_elapsed_label = ui.label()
-                self._total_size_label = ui.label()
-                self._speed_label = ui.label()
+        self._progress_expansion = ui.expansion("Encoding").classes("w-full")
+
+        self.set_label_texts()
 
     async def run(self) -> None:
         if self._run_switch.value:
@@ -114,24 +92,31 @@ class Common(FullyValidatedModel):
                 self._run_switch.value = False
 
     def wrap_main(self) -> None:
-        self._results.clear()
+        self._results_grid.clear()
         for path in self.main():
-            with self._results:
+            with self._results_grid:
                 media_element(path)
 
     @abstractmethod
     def main(self) -> Generator[Path]: ...
 
-    @ui.refreshable_method
-    async def select_input_paths(self) -> None:
-        self.input_paths = await self.select_paths(self.input_paths, allow_multiple=True)
-        self.on_input_paths_change()
+    def set_label_texts(self) -> None:
+        self._input_label.text = ", ".join(map(fspath, self.input_paths))
+        self._output_label.text = fspath(self.output_directory)
 
-    async def select_output_directory(self) -> None:
+    async def select_input(self) -> None:
+        self.input_paths = await self.select_paths(self.input_paths, allow_multiple=True)
+        self.set_label_texts()
+
+        self._input_grid.clear()
+        with self._input_grid:
+            for input_path in self.input_paths:
+                if input_path.exists():
+                    media_element(input_path)
+
+    async def select_output(self) -> None:
         (self.output_directory,) = await self.select_paths([self.output_directory], FOLDER_DIALOG)
-        self._output_directory_label.text = fspath(self.output_directory)
-        self.output_directory.mkdir(parents=True, exist_ok=True)
-        self.set_start_enabled()
+        self.set_label_texts()
 
     async def select_paths[T](self, default: T, dialog_type: int = OPEN_DIALOG, *, allow_multiple: bool = False) -> T | list[Path]:
         # app.native.main_window.create_file_dialog can also return None, so we are casting it for maximum type safety.
@@ -148,16 +133,6 @@ class Common(FullyValidatedModel):
             return paths
         return default
 
-    def on_input_paths_change(self) -> None:
-        self._input_paths_label.text = ", ".join(map(fspath, self.input_paths))
-        for input_path in self.input_paths:
-            if input_path.exists():
-                media_element(input_path)
-        self.set_start_enabled()
-
-    def set_start_enabled(self) -> None:
-        return self._run_switch.set_enabled(bool(self.input_paths))
-
     def encode_with_progress(self, stream: GlobalArgs, duration: float) -> None:
         stream = stream.global_args(
             loglevel="warning",
@@ -168,55 +143,63 @@ class Common(FullyValidatedModel):
         duration_delta = timedelta(seconds=duration)
         ratio_format = "{} / {}"
 
-        self._code_block.content = stream.compile_line()
-        self._progress.props(remove="color")
+        self._progress_expansion.clear()
+        with self._progress_expansion:
+            ui.code(stream.compile_line()).classes("w-full").markdown.style("scrollbar-color: gray black")
+            with ui.row(wrap=False, align_items="center").classes("w-full"):
+                ui.image("妖夢ちゃんに誕生日お祝いしてもらいました.webp").props("width=5%")
+                progress = ui.linear_progress()
 
-        with stream.run_async(quiet=True) as process:
-            self.handle_std(process, duration_delta, ratio_format)
-            errors = "" if process.stderr is None else process.stderr.read().decode()
+                with stream.run_async(quiet=True) as process:
+                    self.handle_std(process, duration_delta, ratio_format, progress)
+                    errors = "" if process.stderr is None else process.stderr.read().decode()
 
         if process.poll():
-            self._progress.props("color=negative")
+            progress.props("color=negative")
             raise RuntimeError(errors)
 
-        self._progress.props("color=positive")
-        self._progress.value = 1
+        progress.props("color=positive")
+        progress.value = 1
 
         getLogger().warning(errors)
 
-    def handle_std(self, process: Popen[bytes], duration_delta: timedelta, ratio_format: str) -> None:
+    def handle_std(self, process: Popen[bytes], duration_delta: timedelta, ratio_format: str, progress: ui.linear_progress) -> None:
         if process.stdout is None:
             return
 
-        start_time = perf_counter()
+        out_time_label = ui.label()
+        time_elapsed_label = ui.label()
+        total_size_label = ui.label()
+        speed_label = ui.label()
 
+        start_time = perf_counter()
         for line in process.stdout:
             if Server.instance.should_exit or not self._run_switch.value:
                 process.terminate()
-                self._progress.props("color=warning")
+                progress.props("color=warning")
                 raise CancelledError
 
             match line.split(b"="):
                 case [b"total_size", total_size]:
-                    self._total_size_label.text = ratio_format.format(
+                    total_size_label.text = ratio_format.format(
                         ByteSize(total_size).human_readable(),
-                        ByteSize(int(total_size) / (self._progress.value or inf)).human_readable(),
+                        ByteSize(int(total_size) / (progress.value or inf)).human_readable(),
                     )
                 case [b"out_time_us", out_time_us] if out_time_us != b"N/A\n":
                     out_time_delta = timedelta(microseconds=int(out_time_us))
                     time_elapsed_delta = timedelta(seconds=perf_counter() - start_time)
 
-                    self._progress.value = out_time_delta / duration_delta
-                    self._out_time_label.text = ratio_format.format(
+                    progress.value = out_time_delta / duration_delta
+                    out_time_label.text = ratio_format.format(
                         out_time_delta,
                         duration_delta,
                     )
-                    self._time_elapsed_label.text = ratio_format.format(
+                    time_elapsed_label.text = ratio_format.format(
                         time_elapsed_delta,
-                        time_elapsed_delta / self._progress.value,
+                        time_elapsed_delta / progress.value,
                     )
                 case [b"speed", speed]:
-                    self._speed_label.text = speed.decode()
+                    speed_label.text = speed.decode()
                 case _:
                     pass
 

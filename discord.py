@@ -66,14 +66,15 @@ class SoundReactionsCreator(Common):
                 on_change=lambda arguments: self.on_selection.refresh(arguments),
             ).classes("w-full")
             ui.input("Output Suffix").bind_value(self, "output_suffix")
+
         with ui.expansion("Edits").classes("w-full"), ui.grid(columns=3):
             self.on_selection(None)
 
         super().model_post_init(*args)
 
     @override
-    def on_input_paths_change(self) -> None:
-        super().on_input_paths_change()
+    async def select_input(self) -> None:
+        await super().select_input()
         self._input_selector.set_options(self.serialize(self.input_paths))
 
     @override
