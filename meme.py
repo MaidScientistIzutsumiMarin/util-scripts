@@ -1,6 +1,4 @@
-from collections.abc import Generator
 from functools import partial
-from pathlib import Path
 from typing import ClassVar, TypeVar, override
 
 import ffmpeg
@@ -9,7 +7,7 @@ from nicegui import ui
 from pydantic import PositiveFloat, PositiveInt
 from pydantic_extra_types.color import Color
 
-from common import Common, get_duration, get_stream_info
+from common import Common, get_duration, get_ffprobe_info, media_element
 
 AnyElement = TypeVar("AnyElement", bound=ui.element)
 
@@ -28,11 +26,11 @@ class Meme(Common):
     output_suffix: str = ".webp"
 
     @override
-    def model_post_init(self, *args: object) -> None:
+    def model_post_init(self, context: object) -> None:
         init_fontdb()
 
         with ui.row(wrap=False, align_items="center"):
-            self.set_font_family("")
+            self.set_font_family(self.font_family)
             self.color_picker_button("Font Color", "font_color")
             self.color_picker_button("Box Color", "box_color")
             ui.input("Output Suffix").bind_value(self, "output_suffix")
@@ -47,12 +45,11 @@ class Meme(Common):
 
         self._text_area = ui.textarea("Overlay Text").classes("w-full").props("clearable").bind_value(self, "text")
 
-        return super().model_post_init(*args)
+        return super().model_post_init(context)
 
     @ui.refreshable_method
     def set_font_family(self, font_family: str) -> None:
-        if font_family:
-            self.font_family = font_family
+        self.font_family = font_family
 
         with ui.dropdown_button(self.font_family, auto_close=True).style(f"font-family: {self.font_family}"), ui.column(align_items="stretch").classes("gap-0"):
             for family in sorted(all_fonts()):
@@ -75,14 +72,14 @@ class Meme(Common):
         setattr(self, attr, background_color)
 
     @override
-    def main(self) -> Generator[Path]:
+    def main(self) -> None:
         font_style = get_font_styles(self.font_family)[0] if not has_font_style(self.font_family, self.default_font_style) else self.default_font_style
         font_file = str(get_font(self.font_family, font_style).path)
 
         for input_path in self.input_paths:
-            stream_info = get_stream_info(input_path, "width", "height", stream="v")
-            if stream_info.width is None or stream_info.height is None:
-                msg = f"The value of 'width' or 'height' is None: {stream_info}"
+            info = get_ffprobe_info(input_path, "stream", "width", stream="v")
+            if info.streams is None or info.streams.stream is None or info.streams.stream[0].width is None:
+                msg = f"The value of 'stream' or 'width' is None: {info}"
                 raise ValueError(msg)
 
             output_path = self.output_directory / input_path.with_suffix(self.output_suffix)
@@ -90,13 +87,13 @@ class Meme(Common):
                 ffmpeg.input(input_path, hwaccel=self.hwaccel)
                 .drawtext(
                     fontfile=font_file,
-                    text=self._text_area.value.replace("\n", "\r"),
+                    text=self.text.replace("\n", "\r"),
                     box=True,
                     boxcolor=self.box_color.as_hex(format="long"),
                     fontcolor=self.font_color.as_hex(format="long"),
                     fontsize=self.font_size,
                     text_align="center+middle",
-                    boxw=stream_info.width,
+                    boxw=info.streams.stream[0].width,
                     boxh=self.box_height,
                 )
                 .output(
@@ -108,4 +105,4 @@ class Meme(Common):
             )
 
             self.encode_with_progress(stream, get_duration(input_path))
-            yield output_path
+            media_element(output_path)

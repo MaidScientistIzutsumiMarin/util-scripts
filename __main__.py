@@ -15,50 +15,36 @@ class LogElementHandler(ui.log, Handler):
     def emit(self, record: LogRecord) -> None:
         match record.levelno:
             case logging.ERROR | logging.CRITICAL:
-                color = "text-negative"
+                color = "negative"
             case logging.WARNING:
-                color = "text-warning"
+                color = "warning"
             case logging.INFO:
-                color = "text-info"
+                color = "info"
             case logging.DEBUG:
-                color = "text-grey"
+                color = "grey"
             case _:
                 color = ""
-        self.push(self.format(record), classes=color)
+        self.push(self.format(record), classes=f"text-{color}", props="clearable")
 
 
 def main() -> None:
-    tab_key = "tab"
-
     if name == "nt":
         set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 
-    with ui.tabs().classes("w-full") as tabs:
-        one = ui.tab(Compress.__name__)
-        two = ui.tab(Discord.__name__)
-        three = ui.tab(Meme.__name__)
-    ui.separator()
-    with ui.tab_panels(
-        tabs,
-        value=app.storage.general.get(tab_key, one),
-        on_change=lambda handler: app.storage.general.update({tab_key: handler.value}),
-    ).classes("w-full"):
-        Compress.load(one)
-        Discord.load(two)
-        Meme.load(three)
+    tabs = ui.tabs().classes("w-full")
+    with ui.tab_panels(tabs).classes("w-full"):
+        Compress.load(tabs)
+        Discord.load(tabs)
+        Meme.load(tabs)
 
     with ui.row().classes("w-full"):
         ui.space()
         ui.button("Quit", on_click=app.shutdown)
 
-    getLogger().addHandler(LogElementHandler().classes("w-full"))
+    getLogger().addHandler(LogElementHandler())
 
     ui.timer(0, lambda: app.native.main_window is not None and app.native.main_window.maximize(), once=True)
-    ui.run(
-        dark=None,
-        native=True,
-        reload=False,
-    )
+    ui.run(dark=None, native=True, reload=False)
 
 
 if __name__ == "__main__":

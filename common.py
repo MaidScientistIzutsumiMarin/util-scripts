@@ -1,8 +1,7 @@
 from abc import abstractmethod
 from asyncio import CancelledError
-from collections.abc import Generator
 from datetime import timedelta
-from functools import cache
+from functools import partial
 from logging import getLogger
 from math import inf
 from mimetypes import guess_file_type
@@ -14,7 +13,7 @@ from typing import ClassVar, Literal, Self, cast, override
 
 from ffmpeg import probe_obj
 from ffmpeg.dag.global_runnable.global_args import GlobalArgs
-from ffmpeg.ffprobe.schema import ffprobeType, formatType, streamType
+from ffmpeg.ffprobe.schema import ffprobeType
 from nicegui import app, ui
 from nicegui.run import io_bound
 from nicegui.server import Server
@@ -42,27 +41,24 @@ class Common(FullyValidatedModel):
     output_directory: Path = Path()
 
     @classmethod
-    @cache
-    def toml_path(cls) -> Path:
-        return Path("config", f"{cls.__name__}.json")
-
-    @classmethod
-    def load(cls, tab: ui.tab) -> Self:
+    def load(cls, tabs: ui.tabs) -> None:
+        with tabs:
+            tab = ui.tab(cls.__name__)
         with ui.tab_panel(tab):
-            return cls.model_validate_json(cls.toml_path().read_bytes()) if cls.toml_path().exists() else cls()
+            cls.model_validate(app.storage.general[cls.__name__])
+        tabs.set_value(tabs.value or tab)
 
     @model_validator(mode="after")
     def write(self) -> Self:
-        self.toml_path().parent.mkdir(parents=True, exist_ok=True)
-        self.toml_path().write_text(self.model_dump_json(indent=4), encoding="utf_8")
+        app.storage.general[self.__class__.__name__] = self.model_dump(mode="json")
         return self
 
     @override
-    def model_post_init(self, *args: object) -> None:
-        super().model_post_init(*args)
+    def model_post_init(self, context: object) -> None:
+        super().model_post_init(context)
 
         with ui.row():
-            self._run_switch = ui.switch("Run", on_change=self.run)
+            self._run_switch = ui.switch("Run", on_change=partial(io_bound, self.run))
 
         with ui.grid(columns=2).classes("w-full h-full"):
             ui.button("Select Input Paths", on_click=self.select_input)
@@ -84,21 +80,17 @@ class Common(FullyValidatedModel):
 
         self.set_label_texts()
 
-    async def run(self) -> None:
+    def run(self) -> None:
         if self._run_switch.value:
             try:
-                await io_bound(self.wrap_main)
+                self._results_grid.clear()
+                with self._results_grid:
+                    self.main()
             finally:
                 self._run_switch.value = False
 
-    def wrap_main(self) -> None:
-        self._results_grid.clear()
-        for path in self.main():
-            with self._results_grid:
-                media_element(path)
-
     @abstractmethod
-    def main(self) -> Generator[Path]: ...
+    def main(self) -> None: ...
 
     def set_label_texts(self) -> None:
         self._input_label.text = ", ".join(map(fspath, self.input_paths))
@@ -217,27 +209,11 @@ def media_element(path: Path) -> ui.audio | ui.image | ui.video | None:
 
 
 def get_duration(path: StrPath) -> float:
-    format_info = get_format_info(path, "duration")
-    if format_info.duration is None:
-        msg = f"The value of 'duration' is None: {format_info}"
+    info = get_ffprobe_info(path, "format", "duration", stream="")
+    if info.format is None or info.format.duration is None:
+        msg = f"The value of 'format' or 'duration' is None: {info}"
         raise ValueError(msg)
-    return format_info.duration
-
-
-def get_stream_info(path: StrPath, *entries: str, stream: str) -> streamType:
-    info = get_ffprobe_info(path, "stream", *entries, stream=stream)
-    if info.streams is None or info.streams.stream is None:
-        msg = f"The value of 'stream' is None: {info}"
-        raise ValueError(msg)
-    return info.streams.stream[0]
-
-
-def get_format_info(path: StrPath, *entries: str) -> formatType:
-    info = get_ffprobe_info(path, "format", *entries, stream="")
-    if info.format is None:
-        msg = f"The value of 'format' is None: {info}"
-        raise ValueError(msg)
-    return info.format
+    return info.format.duration
 
 
 def get_ffprobe_info(path: StrPath, entries_type: Literal["stream", "format"], *entries: str, stream: str) -> ffprobeType:

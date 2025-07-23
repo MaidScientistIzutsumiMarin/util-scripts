@@ -1,4 +1,4 @@
-from collections.abc import Generator, Iterable
+from collections.abc import Iterable
 from datetime import timedelta
 from functools import partial, total_ordering
 from operator import itemgetter
@@ -58,7 +58,7 @@ class Discord(Common):
                     ui.input("Output Filename Base").classes("w-full").bind_value(reaction, "output_filename_base")
 
     @override
-    def model_post_init(self, *args: object, input_button: bool = True) -> None:
+    def model_post_init(self, context: object) -> None:
         with ui.row(wrap=False).classes("w-full"):
             self._input_selector = ui.select(
                 self.serialize(self.input_paths),
@@ -70,7 +70,7 @@ class Discord(Common):
         with ui.expansion("Edits").classes("w-full"), ui.grid(columns=3):
             self.on_selection(None)
 
-        super().model_post_init(*args)
+        super().model_post_init(context)
 
     @override
     async def select_input(self) -> None:
@@ -78,7 +78,7 @@ class Discord(Common):
         self._input_selector.set_options(self.serialize(self.input_paths))
 
     @override
-    def main(self) -> Generator[Path]:
+    def main(self) -> None:
         for reaction in self.reactions.values():
             output_path = self.output_directory / Path(reaction.output_filename_base).with_suffix(self.output_suffix)
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -107,4 +107,4 @@ class Discord(Common):
             normalize.add_media_file(fspath(output_path), fspath(output_path))
             normalize.run_normalization()
 
-            yield output_path
+            media_element(output_path)
