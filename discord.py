@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
 from datetime import timedelta
 from functools import partial, total_ordering
 from operator import itemgetter
@@ -78,7 +78,7 @@ class Discord(Common):
         self._input_selector.set_options(self.serialize(self.input_paths))
 
     @override
-    def main(self) -> None:
+    def main(self) -> Generator[Path]:
         for reaction in self.reactions.values():
             output_path = self.output_directory / Path(reaction.output_filename_base).with_suffix(self.output_suffix)
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -107,4 +107,4 @@ class Discord(Common):
             normalize.add_media_file(fspath(output_path), fspath(output_path))
             normalize.run_normalization()
 
-            media_element(output_path)
+            yield output_path

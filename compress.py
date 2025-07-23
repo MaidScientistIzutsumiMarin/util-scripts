@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from pathlib import Path
 from tempfile import TemporaryFile
 from typing import override
@@ -6,7 +7,7 @@ import ffmpeg
 from nicegui import ui
 from pydantic import ByteSize
 
-from common import Common, get_duration, media_element
+from common import Common, get_duration
 
 
 class Compress(Common):
@@ -20,7 +21,7 @@ class Compress(Common):
         return super().model_post_init(context)
 
     @override
-    def main(self) -> None:
+    def main(self) -> Generator[Path]:
         with TemporaryFile(suffix=self.output_suffix, delete_on_close=False) as audio_fp:
             audio_path = Path(audio_fp.name)
             audio_input = ffmpeg.input(audio_path)
@@ -45,4 +46,5 @@ class Compress(Common):
                 )
 
                 self.encode_with_progress(stream, duration)
-                media_element(output_path)
+
+                yield output_path

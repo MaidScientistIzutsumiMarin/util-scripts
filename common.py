@@ -1,5 +1,6 @@
 from abc import abstractmethod
 from asyncio import CancelledError
+from collections.abc import Generator
 from datetime import timedelta
 from functools import partial
 from logging import getLogger
@@ -36,7 +37,6 @@ class FullyValidatedModel(BaseModel):
 class Common(FullyValidatedModel):
     hwaccel: ClassVar = "d3d12va"
 
-    last_paths: dict[int, Path] = {}
     input_paths: list[Path] = []
     output_directory: Path = Path()
 
@@ -85,12 +85,13 @@ class Common(FullyValidatedModel):
             try:
                 self._results_grid.clear()
                 with self._results_grid:
-                    self.main()
+                    for output_path in self.main():
+                        media_element(output_path)
             finally:
                 self._run_switch.value = False
 
     @abstractmethod
-    def main(self) -> None: ...
+    def main(self) -> Generator[Path]: ...
 
     def set_label_texts(self) -> None:
         self._input_label.text = ", ".join(map(fspath, self.input_paths))
@@ -110,19 +111,13 @@ class Common(FullyValidatedModel):
         (self.output_directory,) = await self.select_paths([self.output_directory], FOLDER_DIALOG)
         self.set_label_texts()
 
-    async def select_paths[T](self, default: T, dialog_type: int = OPEN_DIALOG, *, allow_multiple: bool = False) -> T | list[Path]:
+    async def select_paths[T](self, default: T, dialog_type: int = OPEN_DIALOG, *, allow_multiple: bool = False) -> list[Path] | T:
         # app.native.main_window.create_file_dialog can also return None, so we are casting it for maximum type safety.
-        if files := app.native.main_window and cast(
+        if file := app.native.main_window is not None and cast(
             "tuple[str, ...] | None",
-            await app.native.main_window.create_file_dialog(
-                dialog_type,
-                fspath(self.last_paths.get(dialog_type, "")),
-                allow_multiple=allow_multiple,
-            ),
+            await app.native.main_window.create_file_dialog(dialog_type, allow_multiple=allow_multiple),
         ):
-            paths = list(map(Path, files))
-            self.last_paths[dialog_type] = paths[0]
-            return paths
+            return list(map(Path, file))
         return default
 
     def encode_with_progress(self, stream: GlobalArgs, duration: float) -> None:

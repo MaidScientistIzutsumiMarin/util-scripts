@@ -1,4 +1,6 @@
+from collections.abc import Generator
 from functools import partial
+from pathlib import Path
 from typing import ClassVar, TypeVar, override
 
 import ffmpeg
@@ -7,7 +9,7 @@ from nicegui import ui
 from pydantic import PositiveFloat, PositiveInt
 from pydantic_extra_types.color import Color
 
-from common import Common, get_duration, get_ffprobe_info, media_element
+from common import Common, get_duration, get_ffprobe_info
 
 AnyElement = TypeVar("AnyElement", bound=ui.element)
 
@@ -72,7 +74,7 @@ class Meme(Common):
         setattr(self, attr, background_color)
 
     @override
-    def main(self) -> None:
+    def main(self) -> Generator[Path]:
         font_style = get_font_styles(self.font_family)[0] if not has_font_style(self.font_family, self.default_font_style) else self.default_font_style
         font_file = str(get_font(self.font_family, font_style).path)
 
@@ -105,4 +107,4 @@ class Meme(Common):
             )
 
             self.encode_with_progress(stream, get_duration(input_path))
-            media_element(output_path)
+            yield output_path
