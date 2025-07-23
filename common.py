@@ -61,10 +61,10 @@ class Common(FullyValidatedModel):
             self._run_switch = ui.switch("Run", on_change=partial(io_bound, self.run))
 
         with ui.grid(columns=2).classes("w-full h-full"):
-            ui.button("Select Input Paths", on_click=self.select_input)
+            ui.button("Select Inputs", on_click=self.select_inputs)
             with ui.row(wrap=False, align_items="stretch"):
-                ui.button("Select Output Directory", on_click=self.select_output).classes("w-full")
-                ui.input("Output Extension").bind_value(self, "output_suffix")
+                ui.button("Select Output", on_click=self.select_output).classes("w-full")
+                ui.input("Output Suffix").bind_value(self, "output_suffix")
 
             self._input_label = ui.label().classes("text-caption text-center text-grey")
             self._output_label = ui.label().classes("text-caption text-center text-grey")
@@ -97,15 +97,15 @@ class Common(FullyValidatedModel):
         self._input_label.text = ", ".join(map(fspath, self.input_paths))
         self._output_label.text = fspath(self.output_directory)
 
-    async def select_input(self) -> None:
-        self.input_paths = await self.select_paths(self.input_paths, allow_multiple=True)
-        self.set_label_texts()
-
         self._input_grid.clear()
         with self._input_grid:
             for input_path in self.input_paths:
                 if input_path.exists():
                     media_element(input_path)
+
+    async def select_inputs(self) -> None:
+        self.input_paths = await self.select_paths(self.input_paths, allow_multiple=True)
+        self.set_label_texts()
 
     async def select_output(self) -> None:
         (self.output_directory,) = await self.select_paths([self.output_directory], FOLDER_DIALOG)

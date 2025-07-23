@@ -73,8 +73,8 @@ class Discord(Common):
         super().model_post_init(context)
 
     @override
-    async def select_input(self) -> None:
-        await super().select_input()
+    async def select_inputs(self) -> None:
+        await super().select_inputs()
         self._input_selector.set_options(self.serialize(self.input_paths))
 
     @override
