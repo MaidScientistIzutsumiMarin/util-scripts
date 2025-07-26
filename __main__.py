@@ -62,7 +62,7 @@ def main() -> None:
 
     getLogger().addHandler(LogElementHandler())
 
-    ui.timer(0, lambda: app.native.main_window is not None and app.native.main_window.maximize(), once=True)
+    app.on_startup(lambda: app.native.main_window is not None and app.native.main_window.maximize())
     ui.run(dark=None, native=True, reload=False)
 
 
