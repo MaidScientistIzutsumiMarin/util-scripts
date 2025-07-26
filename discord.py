@@ -54,8 +54,8 @@ class Discord(Common):
                 ui.label(reaction.input_path.name).classes("col-span-full text-caption text-grey")
                 media_element(reaction.input_path)
                 with ui.column():
-                    ui.input("Start Time").classes("w-full").props("clearable").bind_value(reaction, "start_time")
-                    ui.input("Output Filename Base").classes("w-full").bind_value(reaction, "output_filename_base")
+                    ui.input("Start Time", on_change=self.write).classes("w-full").props("clearable").bind_value(reaction, "start_time")  # pyright: ignore[reportArgumentType]
+                    ui.input("Output Filename Base", on_change=self.write).classes("w-full").bind_value(reaction, "output_filename_base")  # pyright: ignore[reportArgumentType]
 
     @override
     def model_post_init(self, context: object) -> None:
