@@ -1,14 +1,31 @@
 import logging
 import sys
 from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
+from collections.abc import Awaitable, Callable
 from logging import Handler, LogRecord, getLogger
 from os import name
 
+from anyio import EndOfStream
 from nicegui import app, ui
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 from compress import Compress
 from discord import Discord
 from meme import Meme
+
+
+class IgnoreClientDisconnect(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        try:
+            return await call_next(request)
+        except RuntimeError as exc:
+            if str(exc) == "No response returned.":
+                return Response(status_code=499)
+            raise
+        except EndOfStream:
+            return Response(status_code=499)
 
 
 class LogElementHandler(ui.log, Handler):
@@ -28,6 +45,8 @@ class LogElementHandler(ui.log, Handler):
 
 
 def main() -> None:
+    app.add_middleware(IgnoreClientDisconnect)
+
     if name == "nt":
         set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 
