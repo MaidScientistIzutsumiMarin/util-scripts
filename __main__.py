@@ -7,6 +7,7 @@ from os import name
 
 from anyio import EndOfStream
 from nicegui import app, ui
+from nicegui.slot import Slot
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -45,6 +46,9 @@ class LogElementHandler(ui.log, Handler):
 
 
 def main() -> None:
+    # Without this line, we get "IndexError: pop from empty list"
+    Slot.prune_stacks = dummy
+    # Without this line, we get "RuntimeError: No response returned."
     app.add_middleware(IgnoreClientDisconnect)
 
     if name == "nt":
@@ -64,6 +68,10 @@ def main() -> None:
 
     app.on_startup(lambda: app.native.main_window is not None and app.native.main_window.maximize())
     ui.run(dark=None, native=True, reload=False)
+
+
+async def dummy() -> None:
+    pass
 
 
 if __name__ == "__main__":
