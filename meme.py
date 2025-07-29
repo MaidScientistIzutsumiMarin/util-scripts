@@ -35,7 +35,6 @@ class Meme(Common):
             self.set_font_family(self.font_family)
             self.color_picker_button("Font Color", "font_color")
             self.color_picker_button("Box Color", "box_color")
-            ui.input("Output Suffix").bind_value(self, "output_suffix")
             ui.checkbox("Loop").bind_value(self, "loop")
 
         with ui.row(wrap=False, align_items="center").classes("w-full"):
@@ -84,7 +83,7 @@ class Meme(Common):
                 msg = f"The value of 'stream' or 'width' is None: {info}"
                 raise ValueError(msg)
 
-            output_path = self.output_directory / input_path.with_suffix(self.output_suffix)
+            output_path = self.get_output_path(input_path)
             stream = (
                 ffmpeg.input(input_path, hwaccel=self.hwaccel)
                 .drawtext(

@@ -80,7 +80,7 @@ class Discord(Common):
     @override
     def main(self) -> Generator[Path]:
         for reaction in self.reactions.values():
-            output_path = self.output_directory / Path(reaction.output_filename_base).with_suffix(self.output_suffix)
+            output_path = (self.output_directory / reaction.output_filename_base).with_suffix(self.output_suffix)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             duration = 5
