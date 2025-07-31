@@ -9,7 +9,7 @@ from os import fspath
 from pathlib import Path
 from subprocess import Popen
 from time import perf_counter
-from typing import ClassVar, Literal, Self, cast, override
+from typing import ClassVar, Literal, Self, override
 
 from ffmpeg import probe_obj
 from ffmpeg.dag.global_runnable.global_args import GlobalArgs
@@ -121,10 +121,7 @@ class Common(FullyValidatedModel):
 
     async def select_paths[T](self, default: T, dialog_type: int = OPEN_DIALOG, *, allow_multiple: bool = False) -> list[Path] | T:
         # app.native.main_window.create_file_dialog can also return None, so we are casting it for maximum type safety.
-        if file := app.native.main_window is not None and cast(
-            "tuple[str, ...] | None",
-            await app.native.main_window.create_file_dialog(dialog_type, allow_multiple=allow_multiple),
-        ):
+        if file := app.native.main_window is not None and await app.native.main_window.create_file_dialog(dialog_type, allow_multiple=allow_multiple):
             return list(map(Path, file))
         return default
 
