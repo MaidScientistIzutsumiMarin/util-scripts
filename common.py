@@ -18,7 +18,7 @@ from nicegui import app, ui
 from nicegui.run import io_bound
 from nicegui.server import Server
 from pydantic import BaseModel, ByteSize, ConfigDict, model_validator
-from webview import FOLDER_DIALOG, OPEN_DIALOG
+from webview import FileDialog
 
 type StrPath = str | Path
 
@@ -116,10 +116,10 @@ class Common(FullyValidatedModel):
         self.update_io_elements()
 
     async def select_output(self) -> None:
-        (self.output_directory,) = await self.select_paths([self.output_directory], FOLDER_DIALOG)
+        (self.output_directory,) = await self.select_paths([self.output_directory], FileDialog.FOLDER)
         self.update_io_elements()
 
-    async def select_paths[T](self, default: T, dialog_type: int = OPEN_DIALOG, *, allow_multiple: bool = False) -> list[Path] | T:
+    async def select_paths[T](self, default: T, dialog_type: int = FileDialog.OPEN, *, allow_multiple: bool = False) -> list[Path] | T:
         # app.native.main_window.create_file_dialog can also return None, so we are casting it for maximum type safety.
         if file := app.native.main_window is not None and await app.native.main_window.create_file_dialog(dialog_type, allow_multiple=allow_multiple):
             return list(map(Path, file))
