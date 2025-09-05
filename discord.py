@@ -101,7 +101,7 @@ class Discord(Common):
             )
 
             seconds = self.parse_to_float(reaction.start_time) or 0
-            self.encode_with_progress(stream, min(5, get_duration(reaction.input_path)) - seconds)
+            self.encode_with_progress(stream, min(5, get_duration(reaction.input_path) - seconds))
 
             normalize = FFmpegNormalize(audio_codec="libopus", extension=self.output_suffix)
             normalize.add_media_file(fspath(output_path), fspath(output_path))
