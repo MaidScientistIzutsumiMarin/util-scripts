@@ -103,11 +103,11 @@ class Common(FullyValidatedModel):
     def main(self) -> Generator[Path]: ...
 
     def update_io_elements(self) -> None:
-        self._input_grid.clear()
-        with self._input_grid:
-            for input_path in self.input_paths:
-                if input_path.exists():
-                    media_element(input_path)
+        # self._input_grid.clear()
+        # with self._input_grid:
+        #     for input_path in self.input_paths:
+        #         if input_path.exists():
+        #             media_element(input_path)
 
         self.output_directory.mkdir(parents=True, exist_ok=True)
 
