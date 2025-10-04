@@ -120,7 +120,6 @@ class Common(FullyValidatedModel):
         self.update_io_elements()
 
     async def select_paths[T](self, default: T, dialog_type: int = FileDialog.OPEN, *, allow_multiple: bool = False) -> list[Path] | T:
-        # app.native.main_window.create_file_dialog can also return None, so we are casting it for maximum type safety.
         if file := app.native.main_window is not None and await app.native.main_window.create_file_dialog(dialog_type, allow_multiple=allow_multiple):
             return list(map(Path, file))
         return default
