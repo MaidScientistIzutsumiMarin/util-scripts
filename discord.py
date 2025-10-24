@@ -1,19 +1,23 @@
-from collections.abc import Generator, Iterable
 from datetime import timedelta
 from functools import partial, total_ordering
 from operator import itemgetter
 from os import fspath
-from pathlib import Path
-from typing import Self, override
+from typing import TYPE_CHECKING, Self, override
 from uuid import UUID, uuid4
 
-import ffmpeg
+from ffmpeg import input as ffmpeg_input
 from ffmpeg_normalize import FFmpegNormalize
-from nicegui import ui
-from nicegui.events import ValueChangeEventArguments
-from pytimeparse2 import parse
+from nicegui.ui import chip, column, expansion, grid, label, refreshable_method, row, select
+from nicegui.ui import input as ui_input
+from pytimeparse2 import parse  # pyright: ignore[reportMissingTypeStubs]
 
 from common import Common, FullyValidatedModel, get_duration, media_element
+
+if TYPE_CHECKING:
+    from collections.abc import Generator, Iterable
+    from pathlib import Path
+
+    from nicegui.events import ValueChangeEventArguments
 
 
 @total_ordering
@@ -43,31 +47,31 @@ class Discord(Common):
         del self.reactions[uuid]
         self.write()  # pyright: ignore[reportCallIssue]
 
-    @ui.refreshable_method
+    @refreshable_method
     def on_selection(self, arguments: ValueChangeEventArguments | None) -> None:
         if arguments is not None:
             self.reactions[uuid4()] = Reaction(input_path=arguments.value)
             self.write()  # pyright: ignore[reportCallIssue]
 
         for uuid, reaction in sorted(self.reactions.items(), key=itemgetter(1)):
-            with ui.chip(removable=True, on_value_change=partial(self.on_remove_edit, uuid)).classes("h-full").props("outline"), ui.grid(columns=2):
-                ui.label(reaction.input_path.name).classes("col-span-full text-caption text-grey")
+            with chip(removable=True, on_value_change=partial(self.on_remove_edit, uuid)).classes("h-full").props("outline"), ui.grid(columns=2):
+                label(reaction.input_path.name).classes("col-span-full text-caption text-grey")
                 media_element(reaction.input_path)
-                with ui.column():
-                    ui.input("Start Time", on_change=self.write).classes("w-full").props("clearable").bind_value(reaction, "start_time")  # pyright: ignore[reportArgumentType]
-                    ui.input("Output Filename Base", on_change=self.write).classes("w-full").bind_value(reaction, "output_filename_base")  # pyright: ignore[reportArgumentType]
+                with column():
+                    ui_input("Start Time", on_change=self.write).classes("w-full").props("clearable").bind_value(reaction, "start_time")  # pyright: ignore[reportArgumentType]
+                    ui_input("Output Filename Base", on_change=self.write).classes("w-full").bind_value(reaction, "output_filename_base")  # pyright: ignore[reportArgumentType]
 
     @override
     def model_post_init(self, context: object) -> None:
-        with ui.row(wrap=False).classes("w-full"):
-            self._input_selector = ui.select(
+        with row(wrap=False).classes("w-full"):
+            self._input_selector = select(
                 self.serialize(self.input_paths),
                 label="Select Input",
                 on_change=lambda arguments: self.on_selection.refresh(arguments),
             ).classes("w-full")
-            ui.input("Output Suffix").bind_value(self, "output_suffix")
+            ui_input("Output Suffix").bind_value(self, "output_suffix")
 
-        with ui.expansion("Edits").classes("w-full"), ui.grid(columns=3):
+        with expansion("Edits").classes("w-full"), grid(columns=3):
             self.on_selection(None)
 
         super().model_post_init(context)
@@ -85,7 +89,7 @@ class Discord(Common):
 
             duration = 5
             stream = (
-                ffmpeg.input(
+                ffmpeg_input(
                     reaction.input_path,
                     ss=self.parse_to_float(reaction.start_time),
                 )

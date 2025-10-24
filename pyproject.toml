@@ -1,6 +1,6 @@
 [project]
 name = "util-scripts"
-requires-python = ">= 3.13"
+requires-python = ">= 3.14"
 dependencies = [
   "ffmpeg-normalize",
   "fontra",
@@ -8,6 +8,6 @@ dependencies = [
   "pydantic",
   "pydantic-extra-types",
   "pytimeparse2",
-  "pywebview",
+  # "pywebview",
   "typed-ffmpeg",
 ]

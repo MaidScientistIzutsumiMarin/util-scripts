@@ -1,13 +1,16 @@
-from collections.abc import Generator
 from pathlib import Path
 from tempfile import TemporaryFile
-from typing import override
+from typing import TYPE_CHECKING, override
 
-import ffmpeg
-from nicegui import ui
-from pydantic import ByteSize
+from ffmpeg import input as ffmpeg_input
+from nicegui.ui import number
 
 from common import Common, get_duration
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from pydantic import ByteSize
 
 
 class Compress(Common):
@@ -16,7 +19,7 @@ class Compress(Common):
 
     @override
     def model_post_init(self, context: object) -> None:
-        ui.number("Max Video Size", suffix="bytes").bind_value(self, "max_size")
+        number("Max Video Size", suffix="bytes").bind_value(self, "max_size")
 
         return super().model_post_init(context)
 
@@ -24,12 +27,12 @@ class Compress(Common):
     def main(self) -> Generator[Path]:
         with TemporaryFile(suffix=self.output_suffix, delete_on_close=False) as audio_fp:
             audio_path = Path(audio_fp.name)
-            audio_input = ffmpeg.input(audio_path)
+            audio_input = ffmpeg_input(audio_path)
 
             for input_path in self.input_paths:
                 duration = get_duration(input_path)
 
-                input_stream = ffmpeg.input(input_path, hwaccel=self.hwaccel)
+                input_stream = ffmpeg_input(input_path, hwaccel=self.hwaccel)
                 stream = input_stream.audio.output(filename=audio_path)
                 self.encode_with_progress(stream, duration)
 
