@@ -16,4 +16,4 @@ with row().classes("w-full"):
     button("Quit", on_click=app.shutdown)
 
 app.on_startup(lambda: app.native.main_window is not None and app.native.main_window.maximize())
-run(dark=None, native=True, reload=False)
+run(dark=None, native=True)
