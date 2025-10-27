@@ -3,14 +3,13 @@ from tempfile import TemporaryFile
 from typing import TYPE_CHECKING, override
 
 from ffmpeg import input as ffmpeg_input
-from nicegui.ui import number
+from nicegui import ui
+from pydantic import ByteSize  # noqa: TC002
 
-from common import Common, get_duration
+from util_scripts.utils.common import Common
 
 if TYPE_CHECKING:
     from collections.abc import Generator
-
-    from pydantic import ByteSize
 
 
 class Compress(Common):
@@ -19,7 +18,7 @@ class Compress(Common):
 
     @override
     def model_post_init(self, context: object) -> None:
-        number("Max Video Size", suffix="bytes").bind_value(self, "max_size")
+        ui.number("Max Video Size", suffix="bytes").bind_value(self, "max_size")
 
         return super().model_post_init(context)
 
@@ -30,7 +29,7 @@ class Compress(Common):
             audio_input = ffmpeg_input(audio_path)
 
             for input_path in self.input_paths:
-                duration = get_duration(input_path)
+                duration = self.get_duration(input_path)
 
                 input_stream = ffmpeg_input(input_path, hwaccel=self.hwaccel)
                 stream = input_stream.audio.output(filename=audio_path)

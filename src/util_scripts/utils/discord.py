@@ -2,20 +2,19 @@ from datetime import timedelta
 from functools import partial, total_ordering
 from operator import itemgetter
 from os import fspath
+from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Self, override
 from uuid import UUID, uuid4
 
 from ffmpeg import input as ffmpeg_input
 from ffmpeg_normalize import FFmpegNormalize
-from nicegui.ui import chip, column, expansion, grid, label, refreshable_method, row, select
-from nicegui.ui import input as ui_input
-from pytimeparse2 import parse  # pyright: ignore[reportMissingTypeStubs]
+from nicegui import ui
+from pytimeparse2 import parse
 
-from common import Common, FullyValidatedModel, get_duration, media_element
+from util_scripts.utils.common import Common, FullyValidatedModel
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
-    from pathlib import Path
 
     from nicegui.events import ValueChangeEventArguments
 
@@ -47,31 +46,31 @@ class Discord(Common):
         del self.reactions[uuid]
         self.write()  # pyright: ignore[reportCallIssue]
 
-    @refreshable_method
+    @ui.refreshable_method
     def on_selection(self, arguments: ValueChangeEventArguments | None) -> None:
         if arguments is not None:
             self.reactions[uuid4()] = Reaction(input_path=arguments.value)
             self.write()  # pyright: ignore[reportCallIssue]
 
         for uuid, reaction in sorted(self.reactions.items(), key=itemgetter(1)):
-            with chip(removable=True, on_value_change=partial(self.on_remove_edit, uuid)).classes("h-full").props("outline"), ui.grid(columns=2):
-                label(reaction.input_path.name).classes("col-span-full text-caption text-grey")
-                media_element(reaction.input_path)
-                with column():
-                    ui_input("Start Time", on_change=self.write).classes("w-full").props("clearable").bind_value(reaction, "start_time")  # pyright: ignore[reportArgumentType]
-                    ui_input("Output Filename Base", on_change=self.write).classes("w-full").bind_value(reaction, "output_filename_base")  # pyright: ignore[reportArgumentType]
+            with ui.chip(removable=True, on_value_change=partial(self.on_remove_edit, uuid)).classes("h-full").props("outline"), ui.grid(columns=2):
+                ui.label(reaction.input_path.name).classes("col-span-full text-caption text-grey")
+                self.media_element(reaction.input_path)
+                with ui.column():
+                    ui.input("Start Time", on_change=self.write).classes("w-full").props("clearable").bind_value(reaction, "start_time")  # pyright: ignore[reportArgumentType]
+                    ui.input("Output Filename Base", on_change=self.write).classes("w-full").bind_value(reaction, "output_filename_base")  # pyright: ignore[reportArgumentType]
 
     @override
     def model_post_init(self, context: object) -> None:
-        with row(wrap=False).classes("w-full"):
-            self._input_selector = select(
+        with ui.row(wrap=False).classes("w-full"):
+            self._input_selector = ui.select(
                 self.serialize(self.input_paths),
                 label="Select Input",
                 on_change=lambda arguments: self.on_selection.refresh(arguments),
             ).classes("w-full")
-            ui_input("Output Suffix").bind_value(self, "output_suffix")
+            ui.input("Output Suffix").bind_value(self, "output_suffix")
 
-        with expansion("Edits").classes("w-full"), grid(columns=3):
+        with ui.expansion("Edits").classes("w-full"), ui.grid(columns=3):
             self.on_selection(None)
 
         super().model_post_init(context)
@@ -79,7 +78,7 @@ class Discord(Common):
     @override
     async def select_inputs(self) -> None:
         await super().select_inputs()
-        self._input_selector.set_options(self.serialize(self.input_paths))
+        self._input_selector.set_options(self.serialize(self.input_paths))  # pyright: ignore[reportUnknownMemberType]
 
     @override
     def main(self) -> Generator[Path]:
@@ -105,7 +104,7 @@ class Discord(Common):
             )
 
             seconds = self.parse_to_float(reaction.start_time) or 0
-            self.encode_with_progress(stream, min(5, get_duration(reaction.input_path) - seconds))
+            self.encode_with_progress(stream, min(5, self.get_duration(reaction.input_path) - seconds))
 
             normalize = FFmpegNormalize(audio_codec="libopus", extension=self.output_suffix)
             normalize.add_media_file(fspath(output_path), fspath(output_path))

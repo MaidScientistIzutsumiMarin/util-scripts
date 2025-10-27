@@ -10,11 +10,9 @@ from time import perf_counter
 from typing import TYPE_CHECKING, ClassVar, Literal, Self, override
 
 from ffmpeg import probe_obj
-from nicegui import app
+from nicegui import app, ui
 from nicegui.run import io_bound
 from nicegui.server import Server
-from nicegui.ui import audio, button, code, expansion, grid, image, label, linear_progress, row, separator, switch, tab, tab_panel, tabs, video
-from nicegui.ui import input as ui_input
 from pydantic import BaseModel, ByteSize, ConfigDict, model_validator
 from webview import FileDialog
 
@@ -34,6 +32,7 @@ class FullyValidatedModel(BaseModel):
         validate_default=True,
         validate_return=True,
         validate_by_name=True,
+        ignored_types=(ui.refreshable_method,),
     )
 
 
@@ -45,13 +44,47 @@ class Common(FullyValidatedModel):
 
     output_suffix: str = ""
 
+    @staticmethod
+    def media_element(path: Path) -> ui.audio | ui.image | ui.video | None:
+        if file_type := guess_file_type(path)[0]:
+            if file_type.startswith("image"):
+                element = ui.image(path)
+                element.force_reload()
+            else:
+                element = ui.video(path)
+            element.props(f"title='{path.as_posix()}'")
+            return element
+        return None
+
+    @staticmethod
+    def get_ffprobe_info(path: StrPath, entries_type: Literal["stream", "format"], *entries: str, stream: str) -> ffprobeType:
+        if info := probe_obj(
+            path,
+            show_streams=False,
+            show_format=False,
+            select_streams=stream,
+            show_entries=f"{entries_type}={','.join(entries)}",
+        ):
+            return info
+
+        msg = "The value from ffprobe is None."
+        raise ValueError(msg)
+
     @classmethod
-    def load(cls, tabs: tabs) -> None:
+    def get_duration(cls, path: StrPath) -> float:
+        info = cls.get_ffprobe_info(path, "format", "duration", stream="")
+        if info.format is None or info.format.duration is None:
+            msg = f"The value of 'format' or 'duration' is None: {info}"
+            raise ValueError(msg)
+        return info.format.duration
+
+    @classmethod
+    def load(cls, tabs: ui.tabs) -> None:
         with tabs:
-            common_tab = tab(cls.__name__)
-        with tab_panel(common_tab):
+            tab = ui.tab(cls.__name__)
+        with ui.tab_panel(tab):
             cls.model_validate(app.storage.general[cls.__name__])
-        tabs.set_value(tabs.value or common_tab)
+        tabs.set_value(tabs.value or tab)
 
     @model_validator(mode="after")
     def write(self) -> Self:
@@ -62,34 +95,34 @@ class Common(FullyValidatedModel):
     def model_post_init(self, context: object) -> None:
         super().model_post_init(context)
 
-        with row():
-            self._run_switch = switch("Run", on_change=self.run)
+        with ui.row():
+            self._run_switch = ui.switch("Run", on_change=self.run)
 
-        with grid(columns=2).classes("w-full h-full"):
-            button("Select Inputs", on_click=self.select_inputs)
-            with row(wrap=False, align_items="stretch"):
-                button("Select Output", on_click=self.select_output).classes("w-full")
-                ui_input("Output Suffix").bind_value(self, "output_suffix")
+        with ui.grid(columns=2).classes("w-full h-full"):
+            ui.button("Select Inputs", on_click=self.select_inputs)
+            with ui.row(wrap=False, align_items="stretch"):
+                ui.button("Select Output", on_click=self.select_output).classes("w-full")
+                ui.input("Output Suffix").bind_value(self, "output_suffix")
 
-            self._input_label = label().classes("text-caption text-center text-grey").bind_text_from(self, "input_paths", lambda input_paths: ", ".join(map(fspath, input_paths)))
-            self._output_label = label().classes("text-caption text-center text-grey").bind_text_from(self, "output_directory", fspath)
+            self._input_label = ui.label().classes("text-caption text-center text-grey").bind_text_from(self, "input_paths", lambda input_paths: ", ".join(map(fspath, input_paths)))
+            self._output_label = ui.label().classes("text-caption text-center text-grey").bind_text_from(self, "output_directory", fspath)
 
-            with expansion("Input"):
-                self._input_grid = grid(columns=2).classes("w-full")
-            with expansion("Output"):
-                self._results_grid = grid(columns=2).classes("w-full")
+            with ui.expansion("Input"):
+                self._input_grid = ui.grid(columns=2).classes("w-full")
+            with ui.expansion("Output"):
+                self._results_grid = ui.grid(columns=2).classes("w-full")
 
-        separator()
+        ui.separator()
 
-        with expansion("Encoding").classes("w-full"):
-            self._code = code().classes("w-full").markdown.style("scrollbar-color: gray black")
-            with row(wrap=False, align_items="center").classes("w-full"):
-                image("妖夢ちゃんに誕生日お祝いしてもらいました.webp").props("width=5%")
-                self._progress = linear_progress()
-                self._out_time_label = label()
-                self._time_elapsed_label = label()
-                self._total_size_label = label()
-                self._speed_label = label()
+        with ui.expansion("Encoding").classes("w-full"):
+            self._code = ui.code().classes("w-full").markdown.style("scrollbar-color: gray black")
+            with ui.row(wrap=False, align_items="center").classes("w-full"):
+                ui.image("妖夢ちゃんに誕生日お祝いしてもらいました.webp").props("width=5%")
+                self._progress = ui.linear_progress()
+                self._out_time_label = ui.label()
+                self._time_elapsed_label = ui.label()
+                self._total_size_label = ui.label()
+                self._speed_label = ui.label()
 
         self.update_io_elements()
 
@@ -99,7 +132,7 @@ class Common(FullyValidatedModel):
                 self._results_grid.clear()
                 with self._results_grid:
                     for output_path in await io_bound(lambda: list(self.main())):
-                        media_element(output_path)
+                        self.media_element(output_path)
             finally:
                 self._run_switch.value = False
 
@@ -111,7 +144,7 @@ class Common(FullyValidatedModel):
         with self._input_grid:
             for input_path in self.input_paths:
                 if input_path.exists():
-                    media_element(input_path)
+                    self.media_element(input_path)
 
         self.output_directory.mkdir(parents=True, exist_ok=True)
 
@@ -190,37 +223,3 @@ class Common(FullyValidatedModel):
                     self._speed_label.text = speed.decode()
                 case _:
                     pass
-
-
-def media_element(path: Path) -> audio | image | video | None:
-    if file_type := guess_file_type(path)[0]:
-        if file_type.startswith("image"):
-            element = image(path)
-            element.force_reload()
-        else:
-            element = video(path)
-        element.props(f"title='{path.as_posix()}'")
-        return element
-    return None
-
-
-def get_duration(path: StrPath) -> float:
-    info = get_ffprobe_info(path, "format", "duration", stream="")
-    if info.format is None or info.format.duration is None:
-        msg = f"The value of 'format' or 'duration' is None: {info}"
-        raise ValueError(msg)
-    return info.format.duration
-
-
-def get_ffprobe_info(path: StrPath, entries_type: Literal["stream", "format"], *entries: str, stream: str) -> ffprobeType:
-    if info := probe_obj(
-        path,
-        show_streams=False,
-        show_format=False,
-        select_streams=stream,
-        show_entries=f"{entries_type}={','.join(entries)}",
-    ):
-        return info
-
-    msg = "The value from ffprobe is None."
-    raise ValueError(msg)

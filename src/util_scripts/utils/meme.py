@@ -3,18 +3,15 @@ from typing import TYPE_CHECKING, ClassVar, TypeVar, override
 
 from ffmpeg import input as ffmpeg_input
 from fontra import all_fonts, get_font, get_font_styles, has_font_style, init_fontdb
-from nicegui import element
-from nicegui.ui import button, checkbox, color_picker, column, dropdown_button, item, label, refreshable_method, row, separator, slider, textarea
-from nicegui.ui import element as ui_element
+from nicegui import element, ui
+from pydantic import PositiveFloat, PositiveInt  # noqa: TC002
 from pydantic_extra_types.color import Color
 
-from common import Common, get_duration, get_ffprobe_info
+from util_scripts.utils.common import Common
 
 if TYPE_CHECKING:
     from collections.abc import Generator
     from pathlib import Path
-
-    from pydantic import PositiveFloat, PositiveInt
 
 AnyElement = TypeVar("AnyElement", bound=element)
 
@@ -36,40 +33,40 @@ class Meme(Common):
     def model_post_init(self, context: object) -> None:
         init_fontdb()
 
-        with row(wrap=False, align_items="center"):
+        with ui.row(wrap=False, align_items="center"):
             self.set_font_family(self.font_family)
             self.color_picker_button("Font Color", "font_color")
             self.color_picker_button("Box Color", "box_color")
-            checkbox("Loop").bind_value(self, "loop")
+            ui.checkbox("Loop").bind_value(self, "loop")
 
-        with row(wrap=False, align_items="center").classes("w-full"):
-            label("Font Size").classes("text-caption text-grey")
-            slider(min=1, max=200).props("label-always").bind_value(self, "font_size")
-            separator().props("vertical")
-            label("Box Height").classes("text-caption text-grey")
-            slider(min=1, max=500).props("label-always").bind_value(self, "box_height")
+        with ui.row(wrap=False, align_items="center").classes("w-full"):
+            ui.label("Font Size").classes("text-caption text-grey")
+            ui.slider(min=1, max=200).props("label-always").bind_value(self, "font_size")
+            ui.separator().props("vertical")
+            ui.label("Box Height").classes("text-caption text-grey")
+            ui.slider(min=1, max=500).props("label-always").bind_value(self, "box_height")
 
-        self._text_area = textarea("Overlay Text").classes("w-full").props("clearable").bind_value(self, "text")
+        self._text_area = ui.textarea("Overlay Text").classes("w-full").props("clearable").bind_value(self, "text")
 
         return super().model_post_init(context)
 
-    @refreshable_method
+    @ui.refreshable_method
     def set_font_family(self, font_family: str) -> None:
         self.font_family = font_family
 
-        with dropdown_button(self.font_family, auto_close=True).style(f"font-family: {self.font_family}"), column(align_items="stretch").classes("gap-0"):
+        with ui.dropdown_button(self.font_family, auto_close=True).style(f"font-family: {self.font_family}"), ui.column(align_items="stretch").classes("gap-0"):
             for family in sorted(all_fonts()):
-                item(
+                ui.item(
                     family,
                     on_click=partial(self.set_font_family.refresh, family),
                 ).style(f"font-family: {family}").set_enabled(self.font_family != family)
 
     def color_picker_button(self, text: str, attr: str) -> None:
-        with button(text, icon="palette") as color_button:
-            color_picker(on_pick=lambda e: self.on_pick_color(color_button, Color(e.color), attr))
+        with ui.button(text, icon="palette") as color_button:
+            ui.color_picker(on_pick=lambda e: self.on_pick_color(color_button, Color(e.color), attr))
         self.on_pick_color(color_button, getattr(self, attr), attr)
 
-    def on_pick_color(self, button: ui_element, background_color: Color, attr: str) -> None:
+    def on_pick_color(self, button: ui.element, background_color: Color, attr: str) -> None:
         r, g, b = (255 - int(value) for value in background_color.as_rgb_tuple())
         text_color = Color((r, g, b))
 
@@ -83,7 +80,7 @@ class Meme(Common):
         font_file = str(get_font(self.font_family, font_style).path)
 
         for input_path in self.input_paths:
-            info = get_ffprobe_info(input_path, "stream", "width", stream="v")
+            info = self.get_ffprobe_info(input_path, "stream", "width", stream="v")
             if info.streams is None or info.streams.stream is None or info.streams.stream[0].width is None:
                 msg = f"The value of 'stream' or 'width' is None: {info}"
                 raise ValueError(msg)
@@ -110,5 +107,5 @@ class Meme(Common):
                 )
             )
 
-            self.encode_with_progress(stream, get_duration(input_path))
+            self.encode_with_progress(stream, self.get_duration(input_path))
             yield output_path
